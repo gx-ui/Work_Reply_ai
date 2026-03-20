@@ -1,6 +1,4 @@
 import json
-import time
-import requests
 from typing import Dict, Union, List, Optional, Any
 from config.config_loader import ConfigLoader
 from tools.milvus_tool import create_milvus_tools, MilvusSearchTool
@@ -59,19 +57,6 @@ class KnowledgeRetrievalTool:
 
         self.milvus_tool = milvus_tool
         self.config_loader = config_loader or (ConfigLoader(config_path) if config_path else None)
-
-        # 加载 rerank 配置
-        self.rerank_config = self.config_loader.get_rerank_config() if (self.config_loader and hasattr(self.config_loader, 'get_rerank_config')) else {}
-        self.rerank_enabled = self.rerank_config.get("enabled", False)
-        if self.rerank_enabled:
-            self.rerank_api_key = self.rerank_config.get("api_key", "")
-            self.rerank_model = self.rerank_config.get("model_name", "gte-rerank-v2")
-            self.rerank_top_k = self.rerank_config.get("top_k", 3)
-            self.rerank_threshold = self.rerank_config.get("threshold", 0.3)
-            self.rerank_url = "https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank"
-            logger.info(f"✅ [Rerank] 已启用 - 模型：{self.rerank_model}, top_k: {self.rerank_top_k}, threshold: {self.rerank_threshold}")
-        else:
-            logger.info("ℹ️ [Rerank] 未启用，将跳过 rerank 步骤")
 
     def search(
         self,
@@ -146,86 +131,7 @@ class KnowledgeRetrievalTool:
         if not items:
             return "未找到相关结果"
 
-        # Rerank 重排序
-        if self.rerank_enabled:
-            reranked = self._apply_rerank(query=query, items=items)
-            if reranked:
-                items = reranked
-                logger.info(f"✅ [Rerank 完成] 重排序后保留 {len(items)} 条结果")
-            else:
-                logger.warning("⚠️ [Rerank 失败] 使用原始检索结果")
-
         return items
-
-    def _apply_rerank(self, query: str, items: List[Dict[str, Any]]) -> Optional[List[Dict[str, Any]]]:
-        """
-        使用 DashScope Rerank API 对检索结果进行重排序。
-        失败时返回 None，调用方降级使用原始结果。
-        """
-        payload: Dict[str, Any] = {}
-        try:
-            t0 = time.time()
-            documents = [item["text"] for item in items]
-            logger.info(f"🔄 [Rerank 开始] 模型：{self.rerank_model}, 候选数：{len(items)}")
-
-            headers = {
-                "Authorization": f"Bearer {self.rerank_api_key}",
-                "Content-Type": "application/json",
-            }
-            payload = {
-                "model": self.rerank_model,
-                "input": {"query": query, "documents": documents},
-                "parameters": {"top_n": self.rerank_top_k, "return_documents": True},
-            }
-
-            resp = requests.post(self.rerank_url, json=payload, headers=headers, timeout=30)
-            resp.raise_for_status()
-            response_data = resp.json()
-
-            results = response_data.get("output", {}).get("results", [])
-            if not results:
-                logger.warning("⚠️ [Rerank 警告] 返回结果为空")
-                return None
-
-            reranked_items = []
-            for result in results:
-                index = result.get("index", 0)
-                score = result.get("relevance_score", 0.0)
-                if score < self.rerank_threshold:
-                    logger.info(f"⚠️ [Rerank 过滤] 索引 {index}, 分数 {score:.4f} < 阈值 {self.rerank_threshold}")
-                    continue
-                doc = result.get("document", {})
-                text = doc.get("text", "") if isinstance(doc, dict) else ""
-                original = items[index].copy()
-                original["text"] = text
-                original["rerank_score"] = score
-                reranked_items.append(original)
-
-            reranked_items.sort(key=lambda x: x.get("rerank_score", 0.0), reverse=True)
-
-            elapsed_ms = int((time.time() - t0) * 1000)
-            usage = response_data.get("usage", {})
-            top_score = f"{reranked_items[0]['rerank_score']:.4f}" if reranked_items else "N/A"
-            logger.info(
-                f"📊 [Rerank 统计]\n"
-                f"⏱️ 耗时：{elapsed_ms}ms\n"
-                f"📈 输入：{len(items)} 条 → 输出：{len(reranked_items)} 条\n"
-                f"💰 消耗 Token: {usage.get('total_tokens', 0)}\n"
-                f"🏆 最高分：{top_score}"
-            )
-            return reranked_items
-
-        except requests.exceptions.HTTPError as e:
-            logger.error(f"❌ [Rerank HTTP 错误] {e.response.status_code}: {e.response.text}")
-            logger.error(f"请求 payload: {json.dumps(payload, ensure_ascii=False)}")
-            return None
-        except requests.exceptions.RequestException as e:
-            logger.error(f"❌ [Rerank 请求错误] {type(e).__name__}: {e}")
-            return None
-        except Exception as e:
-            import traceback
-            logger.error(f"❌ [Rerank 异常] {type(e).__name__}: {e}\n{traceback.format_exc()}")
-            return None
 
     def search_as_string(
         self,

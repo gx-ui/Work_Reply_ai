@@ -34,6 +34,12 @@ class MilvusSearchTool:
             base_url=self.embedder_config.get("base_url"),
             api_key=self.embedder_config.get("api_key")
         )
+
+        # 方案C：缓存路径与 collection_name 绑定，避免多集合共用同一缓存导致文件名串用
+        collection_name = self.milvus_config.get("collection_name") or "default"
+        cache_dir = os.path.join(os.path.dirname(__file__), "..", "config")
+        self._cache_file = os.path.join(cache_dir, f"cache_{collection_name}.json")
+        logger.info(f"[MilvusSearchTool] 集合：{collection_name}  缓存文件：{self._cache_file}")
         
         # 初始化连接
         self._init_connection()
@@ -73,51 +79,59 @@ class MilvusSearchTool:
         cache_file: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        查询并返回去重后的文件名列表
-        
-        优先从本地缓存文件读取，格式如下：
-        {
-            "unique_total_entities": 174,
-            "fields_name_list": ["文件1.md", "文件2.md", ...]
-        }
-        
+        查询并返回去重后的文件名列表。
+
+        优先从与当前集合绑定的缓存文件读取（cache_<collection_name>.json）。
+        若缓存不存在，自动从 Milvus 查询并写入缓存，供后续复用。
+
         Args:
-            include_content: 是否返回文档内容（此参数已废弃，仅保留兼容性）
-            include_fields: 指定返回哪些字段（此参数已废弃）
+            include_content: 是否返回文档内容（已废弃，仅保留兼容性）
+            include_fields: 指定返回字段（已废弃）
             filter_str: 按文件名过滤（支持单个/多个）
-            cache_file: 缓存文件路径，默认使用 config/cache_file_name.json
-            
+            cache_file: 显式指定缓存路径，None 时使用与集合绑定的路径
+
         Returns:
             包含 unique_total_entities 和 fields_name_list 的字典
         """
-        if cache_file is None:
-            cache_file = DEFAULT_CACHE_FILE
-        
-        cache_path = Path(cache_file )
+        # 优先使用显式传入路径，否则使用与集合绑定的专属缓存路径
+        resolved_cache = cache_file if cache_file is not None else self._cache_file
+        cache_path = Path(resolved_cache)
+
         if cache_path.exists():
             try:
                 with open(cache_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                
                 all_file_names = data.get("fields_name_list", [])
-                
                 filtered_names = all_file_names
                 if filter_str:
                     if isinstance(filter_str, str):
                         filter_str = [filter_str]
                     filtered_names = [
-                        name for name in all_file_names 
+                        name for name in all_file_names
                         if any(f in name for f in filter_str)
                     ]
-                logger.info(f"从缓存文件读取 {len(filtered_names)} 个file_name文件名")
+                logger.info(f"从缓存文件读取 {len(filtered_names)} 个 file_name（集合：{self.milvus_config.get('collection_name')}）")
                 return {
                     "unique_total_entities": len(filtered_names),
                     "fields_name_list": filtered_names
                 }
             except Exception as e:
                 logger.warning(f"⚠️ 读取缓存文件失败，回退到 Milvus 查询：{e}")
-        
-        return self._list_chunks_from_milvus(include_content, include_fields, filter_str)
+
+        # 缓存不存在或读取失败：从 Milvus 查询
+        result = self._list_chunks_from_milvus(include_content, include_fields, filter_str)
+
+        # 仅在无 filter_str 时写入全量缓存（过滤结果不缓存）
+        if not filter_str:
+            try:
+                cache_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(cache_path, "w", encoding="utf-8") as f:
+                    json.dump(result, f, ensure_ascii=False, indent=2)
+                logger.info(f"✅ 已写入缓存文件：{resolved_cache}（{result.get('unique_total_entities', 0)} 条）")
+            except Exception as e:
+                logger.warning(f"⚠️ 写入缓存文件失败（不影响检索）：{e}")
+
+        return result
     
     def _list_chunks_from_milvus(
         self,

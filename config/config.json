@@ -51,7 +51,7 @@
         "port": 32017,
         "db_name": "rag",
         "dim": 2048,
-        "collection_name": "zhuyishixiang1",
+        "collection_name": "kefushouhouxiangmuzhuyishixiang_20260313112954",
         "limit": 5,
         "search_params": {
             "metric_type": "COSINE",
