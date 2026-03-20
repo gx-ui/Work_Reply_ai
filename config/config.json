@@ -1,0 +1,92 @@
+{
+    "llm": {
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1/",
+        "api_key": "sk-67538ac36a854414b412e24c9b6d2ea4",
+        "model_name": "qwen-flash",
+        "temperature": 0.1,
+        "stream": false,
+        "timeout": 120,
+        "max_connections": 10,
+        "max_keepalive_connections": 5,
+        "connection_timeout": 30,
+        "read_timeout": 120,
+        "max_retries": 3,
+        "retry_delay": 2,
+        "summary_model": "qwen-turbo",
+        "summary_timeout": 60
+    },
+
+
+    "milvus": {
+        "host": "121.37.229.249",
+        "port": 19530,
+        "db_name": "rag",
+        "connection_alias": "default",
+        "dim": 2048,
+        "collection_name": "kefubuzhishiku1028ban_20251028155535",
+        "limit": 5,
+        "search_params": {
+            "metric_type": "COSINE",
+            "params": {"nprobe": 10}
+        },
+        "output_field": "content"
+    },
+
+    "milvus_kefu_shouhou": {
+        "host": "139.9.63.194",
+        "port": 32017,
+        "db_name": "rag",
+        "dim": 2048,
+        "collection_name": "kefushouhouanliku_20260313112927",
+        "limit": 5,
+        "search_params": {
+            "metric_type": "COSINE",
+            "params": {"nprobe": 10}
+        },
+        "output_field": "content"
+    },
+
+    "milvus_zhuyishixiang": {
+        "host": "139.9.63.194",
+        "port": 32017,
+        "db_name": "rag",
+        "dim": 2048,
+        "collection_name": "zhuyishixiang1",
+        "limit": 5,
+        "search_params": {
+            "metric_type": "COSINE",
+            "params": {"nprobe": 10}
+        },
+        "output_field": "content"
+    },
+    
+
+    "rerank": {
+        "enabled": true,
+        "model_name": "gte-rerank-v2",
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "api_key": "sk-67538ac36a854414b412e24c9b6d2ea4",
+        "max_tokens": 4096,
+        "top_k": 3,
+        "threshold": 0.1,
+        "fallback_to_direct_query": true
+    },
+
+    "embedding": {
+        "model_name": "text-embedding-v4",
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "api_key": "sk-67538ac36a854414b412e24c9b6d2ea4"
+    },
+
+
+    "mysql": {
+        "host": "121.37.229.249",
+        "port": 3306,
+        "user": "root",
+        "password": "_AAAByQ0ODAoPeJx9Uk2P",
+        "database": "log_db"
+    },
+
+    "output_path": "./outputs"
+}
+

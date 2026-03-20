@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Reply Work Assist AI Test",
+  "version": "1",
+  "description": "工单回复助手测试版",
+  "permissions": ["activeTab"],
+  "host_permissions": [
+    "<all_urls>",
+    "http://localhost:8003/*",
+    "http://127.0.0.1:8003/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ]
+}
