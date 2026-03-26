@@ -1687,7 +1687,7 @@
     }
     
     // Show loading in right column fields
-    const fields = ['question', 'status', 'review'];
+    const fields = ['info-summary', 'review'];
     fields.forEach(field => {
         const el = box.querySelector(`.ai-summary-${field}`);
         if (el) el.innerHTML = '<span class="ai-loading-spinner"></span>加载中...';
@@ -1752,12 +1752,10 @@
       // Render Result
       const data = response;
       if (data && data.summary) {
-         const { question, info_summary, review, reviews } = data.summary;
-         const qEl = box.querySelector('.ai-summary-question');
+         const { info_summary, review, reviews } = data.summary;
          const sEl = box.querySelector('.ai-summary-info-summary');
          const rEl = box.querySelector('.ai-summary-review');
          
-         if (qEl) qEl.textContent = question || '无';
          if (sEl) sEl.textContent = info_summary || '待确认';
          if (rEl) rEl.textContent = reviews || review || '无';
       } else {
@@ -1806,16 +1804,16 @@
         <div class="ai-layout-container">
           <!-- Left Column -->
           <div class="ai-left-column">
-            <div class="ai-column-header">工单回复建议：</div>
+            <div class="ai-column-header">查询结果：</div>
             <div class="ai-suggestion-display">
-               <div class="ai-suggestion-text">可为您生成工单回复建议...</div>
+               <div class="ai-suggestion-text">可为您生成查询内容</div>
             </div>
             
             <div class="ai-input-label">输入框：</div>
             <textarea class="ai-custom-input" placeholder="在此输入补充信息/限制..."></textarea>
             
             <div class="ai-actions-row">
-              <button class="ai-btn ai-btn-primary ai-generate-btn">生成建议</button>
+              <button class="ai-btn ai-btn-primary ai-query-btn">查询</button>
               <button class="ai-btn ai-btn-secondary ai-summary-btn">信息总结</button>
               <button class="ai-btn ai-btn-text ai-hide-btn" style="border:none; background:transparent; opacity:0.8; color:white;">隐藏</button>
               
@@ -1828,8 +1826,14 @@
             <div class="ai-column-header">工单信息总结</div>
             <div class="ai-summary-content">
               <div class="ai-summary-section">
-                  <div class="ai-summary-label">工单问题：</div>
-                  <div class="ai-summary-value ai-summary-question">--</div>
+                  <div class="ai-summary-label" style="display:flex;align-items:center;justify-content:space-between;">
+                    <span>工单回复建议：</span>
+                    <div class="ai-suggestion-actions" style="display:flex;align-items:center;gap:8px;">
+                      <button class="ai-btn ai-btn-primary ai-generate-btn" style="font-size:12px;padding:3px 10px;">生成建议</button>
+                      <button class="ai-btn ai-btn-secondary ai-accept-btn" style="font-size:12px;padding:3px 10px;display:none;">采纳</button>
+                    </div>
+                  </div>
+                  <div class="ai-summary-value ai-summary-suggestion">--</div>
               </div>
               <div class="ai-summary-section">
                   <div class="ai-summary-label">信息总结：</div>
@@ -1847,6 +1851,8 @@
       // Event Listeners
       const closeIcon = box.querySelector('.ai-close-icon');
       const generateBtn = box.querySelector('.ai-generate-btn');
+      const acceptBtn = box.querySelector('.ai-accept-btn');
+      const queryBtn = box.querySelector('.ai-query-btn');
       const summaryBtn = box.querySelector('.ai-summary-btn');
       const hideBtn = box.querySelector('.ai-hide-btn');
       const customInput = box.querySelector('.ai-custom-input');
@@ -1862,7 +1868,9 @@
       minimizedView.addEventListener('click', toggleMinimize);
       
       generateBtn.addEventListener('click', () => handleManualGenerate());
+      if (acceptBtn) acceptBtn.addEventListener('click', () => handleAcceptSuggestion());
       summaryBtn.addEventListener('click', () => requestSummary());
+      if (queryBtn) queryBtn.addEventListener('click', () => handleQueryRequest());
 
       box.dataset.listenersAttached = 'true';
 
@@ -1929,37 +1937,86 @@
     return box;
   }
 
+  async function handleQueryRequest() {
+    const box = getOrCreateSuggestionBox();
+    if (!box) return;
+    const customInput = box.querySelector('.ai-custom-input');
+    const queryBtn = box.querySelector('.ai-query-btn');
+    const display = box.querySelector('.ai-suggestion-display');
+
+    const query = customInput ? customInput.value.trim() : '';
+    if (!query) {
+      if (display) display.innerHTML = '<div class="ai-error" style="color:#ffcccb">⚠️ 请先在输入框中输入查询内容</div>';
+      return;
+    }
+
+    // Loading state
+    if (display) display.innerHTML = '<div class="ai-loading"><span class="ai-loading-spinner"></span>AI 正在查询中...</div>';
+    if (queryBtn) { queryBtn.disabled = true; queryBtn.textContent = '查询中...'; }
+
+    try {
+      const snapshot = buildConversationSnapshot();
+      const payload = {
+        ...snapshot,
+        custom_input: query,
+      };
+      const backendUrl = (await getBackendUrl()).replace(/\/$/, '');
+      const resp = await fetch(`${backendUrl}/query`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      const result = data.result || data.content || data.answer || JSON.stringify(data);
+      if (display) display.innerHTML = `<div class="ai-suggestion-text">${escapeHtml(result)}</div>`;
+    } catch (err) {
+      log(`查询失败: ${err.message}`, 'error');
+      if (display) display.innerHTML = `<div class="ai-error" style="color:#ffcccb">⚠️ 查询失败：${escapeHtml(err.message)}</div>`;
+    } finally {
+      if (queryBtn) { queryBtn.disabled = false; queryBtn.textContent = '查询'; }
+    }
+  }
+
   function renderIdleState() {
     const box = getOrCreateSuggestionBox();
     if (!box) return;
     const display = box.querySelector('.ai-suggestion-display');
-    if (display) display.innerHTML = '<div class="ai-suggestion-text">可为您生成工单回复建议...</div>';
+    if (display) display.innerHTML = '<div class="ai-suggestion-text">可输入查询内容...</div>';
     
-    // Reset buttons
+    // Reset generate button
     const generateBtn = box.querySelector('.ai-generate-btn');
+    const acceptBtn = box.querySelector('.ai-accept-btn');
     if (generateBtn) {
         generateBtn.textContent = '生成建议';
         generateBtn.disabled = false;
+    }
+    if (acceptBtn) {
+        acceptBtn.style.display = 'none';
+        acceptBtn.disabled = false;
     }
   }
 
   function renderAgentRepliedState(options = {}) {
     const box = getOrCreateSuggestionBox();
     if (!box) return;
-    const display = box.querySelector('.ai-suggestion-display');
-    if (display) display.innerHTML = `<div class="ai-suggestion-text">检测到客服已回复。点击“生成建议”可获取 AI 建议。</div>`;
+    const summarysuggEl = box.querySelector('.ai-summary-suggestion');
+    if (summarysuggEl) summarysuggEl.textContent = '检测到客服已回复。点击“生成建议”可获取 AI 建议。';
   }
 
   function renderGeneratingState(options = {}) {
     const box = getOrCreateSuggestionBox();
     if (!box) return;
-    const display = box.querySelector('.ai-suggestion-display');
-    if (display) display.innerHTML = `<div class="ai-loading"><span class="ai-loading-spinner"></span>${escapeHtml(options.message || 'AI 正在思考中...')}</div>`;
-    
+    const summarysuggEl = box.querySelector('.ai-summary-suggestion');
+    if (summarysuggEl) summarysuggEl.innerHTML = `<div class="ai-loading" style="color:#1f2a3d;"><span class="ai-loading-spinner" style="border-color:rgba(31,42,61,0.25);border-top-color:#1f2a3d;"></span>${escapeHtml(options.message || 'AI 正在思考中...')}</div>`;
     const generateBtn = box.querySelector('.ai-generate-btn');
+    const acceptBtn = box.querySelector('.ai-accept-btn');
     if (generateBtn) {
         generateBtn.textContent = '生成中...';
         generateBtn.disabled = true;
+    }
+    if (acceptBtn) {
+        acceptBtn.style.display = 'none';
     }
   }
 
@@ -1968,10 +2025,12 @@
     if (!box) return;
     
     const suggestionText = options.suggestion || currentSuggestion || '';
-    const display = box.querySelector('.ai-suggestion-display');
-    if (display) display.innerHTML = `<div class="ai-suggestion-text">${escapeHtml(suggestionText)}</div>`;
+
+    // 建议结果展示在右侧「工单回复建议」区域
+    const summarysuggEl = box.querySelector('.ai-summary-suggestion');
+    if (summarysuggEl) summarysuggEl.textContent = suggestionText || '--';
     
-    // RAG References
+    // RAG References（保留在左侧查询区）
     const ragContainer = box.querySelector('.ai-rag-references');
     const knowledgeSources = options.knowledgeSources || currentKnowledgeSources || [];
     if (ragContainer) {
@@ -1984,23 +2043,32 @@
     }
 
     const generateBtn = box.querySelector('.ai-generate-btn');
+    const acceptBtn = box.querySelector('.ai-accept-btn');
     if (generateBtn) {
         generateBtn.textContent = '重新生成';
         generateBtn.disabled = false;
+    }
+    if (acceptBtn) {
+        acceptBtn.style.display = 'inline-flex';
+        acceptBtn.disabled = false;
     }
   }
 
   function renderErrorState(options = {}) {
     const box = getOrCreateSuggestionBox();
     if (!box) return;
-    const display = box.querySelector('.ai-suggestion-display');
+    const summarysuggEl = box.querySelector('.ai-summary-suggestion');
     const message = options.errorMessage || '暂无信息，请稍后重试';
-    if (display) display.innerHTML = `<div class="ai-error" style="color:#ffcccb">⚠️ ${escapeHtml(message)}</div>`;
+    if (summarysuggEl) summarysuggEl.innerHTML = `<span style="color:#ff6b6b">⚠️ ${escapeHtml(message)}</span>`;
     
     const generateBtn = box.querySelector('.ai-generate-btn');
+    const acceptBtn = box.querySelector('.ai-accept-btn');
     if (generateBtn) {
         generateBtn.textContent = '重试';
         generateBtn.disabled = false;
+    }
+    if (acceptBtn) {
+        acceptBtn.style.display = 'none';
     }
   }
 
@@ -2012,6 +2080,11 @@
     // 手动生成时，重新构建快照以确保是最新的对话状态
     const currentSnapshot = buildConversationSnapshot();
     requestSuggestion({ trigger: 'manual', snapshot: currentSnapshot });
+  }
+
+  function handleAcceptSuggestion() {
+    if (!currentSuggestion) return;
+    fillSuggestion(currentSuggestion);
   }
 
   function handleCancelGenerate() {
@@ -2352,14 +2425,14 @@
     .ai-summary-label {
       font-size: 14px;
       font-weight: 700;
-      color: white;
+      color:rgb(227, 221, 212);
       margin-bottom: 6px;
-      opacity: 0.95;
+      opacity: 1;
     }
 
     .ai-summary-value {
       font-size: 14px;
-      color: rgba(255,255,255,0.9);
+      color: #1f2a3d;
       line-height: 1.5;
       min-height: 20px;
     }

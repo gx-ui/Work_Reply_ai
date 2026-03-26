@@ -80,10 +80,9 @@ def parse_summary(raw: str) -> dict:
     """
     解析 Agent 返回的摘要内容。
     兼容：纯 JSON、markdown 代码块、平铺结构、嵌套 summary 结构。
-    字段：question / info_summary / reviews
-    兼容旧字段 status（向后兼容）。
+    字段：info_summary / reviews
     """
-    _default = {"question": "无", "info_summary": "待确认", "reviews": "无"}
+    _default = {"info_summary": "待确认", "reviews": "无"}
     text = str(raw or "").strip()
     if not text:
         return _default
@@ -94,18 +93,16 @@ def parse_summary(raw: str) -> dict:
     try:
         obj = json.loads(json_str)
         if isinstance(obj, dict):
-            # 格式1：{"summary": {"question": ..., "info_summary": ..., "reviews": ...}}
+            # 格式1：{"summary": {"info_summary": ..., "reviews": ...}}
             summary = obj.get("summary")
             if isinstance(summary, dict):
                 return {
-                    "question":     str(summary.get("question")     or "").strip() or "无",
                     "info_summary": str(summary.get("info_summary") or summary.get("status") or "").strip() or "待确认",
                     "reviews":      str(summary.get("reviews") or summary.get("review") or "").strip() or "无",
                 }
-            # 格式2：平铺 {"question": ..., "info_summary": ..., "reviews": ...}
-            if "question" in obj or "info_summary" in obj or "status" in obj:
+            # 格式2：平铺 {"info_summary": ..., "reviews": ...}
+            if "info_summary" in obj or "status" in obj or "reviews" in obj:
                 return {
-                    "question":     str(obj.get("question")     or "").strip() or "无",
                     "info_summary": str(obj.get("info_summary") or obj.get("status") or "").strip() or "待确认",
                     "reviews":      str(obj.get("reviews") or obj.get("review") or "").strip() or "无",
                 }
@@ -121,7 +118,6 @@ def parse_summary(raw: str) -> dict:
         return (m.group(1) or "").strip() if m else ""
 
     return {
-        "question":     _pick("question") or "无",
         "info_summary": _pick("info_summary") or _pick("status") or "待确认",
         "reviews":      _pick("reviews") or _pick("review") or "无",
     }

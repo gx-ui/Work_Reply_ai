@@ -86,7 +86,6 @@ async def _handle_team_intent(chat_req: ChatRequest) -> Dict[str, Any]:
         raw = await agent_run(state.agent_summary, summary_prompt)
         summary_raw = parse_summary(raw)
         summary = Summary(
-            question=str(summary_raw.get("question") or "").strip() or "无",
             info_summary=str(summary_raw.get("info_summary") or "").strip() or "待确认",
             reviews=str(summary_raw.get("reviews") or summary_raw.get("review") or "").strip() or "无",
         )
