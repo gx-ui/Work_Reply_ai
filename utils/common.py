@@ -121,3 +121,46 @@ def parse_summary(raw: str) -> dict:
         "info_summary": _pick("info_summary") or _pick("status") or "待确认",
         "reviews":      _pick("reviews") or _pick("review") or "无",
     }
+
+
+def parse_query_answer(raw: str) -> dict:
+    """
+    解析 query 意图 LLM 返回的回答。
+    期望格式：{"answer":"...", "sources":[...]}
+    """
+    _default = {"answer": "", "sources": []}
+    text = str(raw or "").strip()
+    if not text:
+        return _default
+
+    json_str = _extract_json_str(text)
+
+    try:
+        obj = json.loads(json_str)
+        if isinstance(obj, dict):
+            answer = str(obj.get("answer") or "").strip()
+            sources = obj.get("sources") or []
+            if not isinstance(sources, list):
+                sources = []
+            sources = [str(s).strip() for s in sources if str(s or "").strip()]
+            if answer:
+                return {"answer": answer, "sources": sources}
+    except Exception:
+        pass
+
+    # 正则兜底
+    compact = text.replace("\n", " ").replace("\r", " ").strip()
+    m = re.search(r'"answer"\s*:\s*"((?:[^"]|\\")+)"', compact)
+    if m:
+        try:
+            answer = json.loads('"' + m.group(1) + '"')
+        except Exception:
+            answer = m.group(1).strip()
+        if answer:
+            return {"answer": answer, "sources": []}
+
+    # 最终兜底：把整段文本当作回答
+    if text and not text.startswith("{"):
+        return {"answer": text, "sources": []}
+
+    return _default

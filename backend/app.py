@@ -13,7 +13,10 @@ from backend.model.request_entity import ChatRequest
 from backend.model.response_entity import Suggestion, Summary
 from backend.services.agent_service import init_state, get_state, ensure_agentos_runtime, get_agentos_app, team_run, agent_run, get_knowledge_sources, reset_knowledge_sources
 from backend.services.prompt_service import build_agent_input, build_summary_input
-from utils.common import parse_suggestion, parse_summary
+from tools.rag_retrieval_tool import KnowledgeRetrievalTool
+from prompt.query_agent_prompt import QUERY_PROMPT_TEMPLATE
+from utils.common import parse_suggestion, parse_summary, parse_query_answer
+from utils.milvus_utils import clip_text
 from utils.log_utils import configure_logging
 
 logger = logging.getLogger("work_reply_ai")
@@ -90,6 +93,47 @@ async def _handle_team_intent(chat_req: ChatRequest) -> Dict[str, Any]:
             reviews=str(summary_raw.get("reviews") or summary_raw.get("review") or "").strip() or "无",
         )
         return {"summary": summary.model_dump()}
+
+    # query 意图：直接全库语义检索，然后用 LLM 整理回答
+    if chat_req.intent == "query":
+        user_query = str(chat_req.query or "").strip()
+        if not user_query:
+            raise HTTPException(status_code=400, detail="query 字段不能为空")
+
+        retrieval_tool = KnowledgeRetrievalTool(config_loader=state.config)
+        raw_results = retrieval_tool.search(query=user_query, limit=5)
+
+        sources = []
+        search_text = "未找到相关结果"
+        if isinstance(raw_results, list) and raw_results:
+            seen_sources = set()
+            lines = [f"检索到 {len(raw_results)} 条结果：", ""]
+            for i, item in enumerate(raw_results, 1):
+                text = str(item.get("text", "") or "")
+                fn = str(item.get("file_name", "") or "").strip()
+                safe_text = clip_text(text, 500)
+                source_label = f"[来源: {fn}] " if fn else ""
+                lines.append(f"【{i}】{source_label}{safe_text}")
+                lines.append("")
+                if fn and fn not in seen_sources:
+                    seen_sources.add(fn)
+                    sources.append(fn)
+            search_text = "\n".join(lines)
+
+        # 用 LLM 整理检索结果
+        if state.agent_plain is None:
+            raise HTTPException(status_code=500, detail="Query Agent 初始化失败")
+        query_prompt = QUERY_PROMPT_TEMPLATE.format(
+            user_query=user_query,
+            search_results=search_text
+        )
+        raw_answer = await agent_run(state.agent_plain, query_prompt)
+        parsed = parse_query_answer(raw_answer)
+        # 合并：LLM 解析出的 sources 与 Milvus 直接提取的 sources 取并集
+        llm_sources = parsed.get("sources") or []
+        all_sources = list(dict.fromkeys(sources + [s for s in llm_sources if s not in sources]))
+
+        return {"answer": parsed.get("answer", ""), "sources": all_sources}
 
     # suggestion 意图：直接调用 work_reply_agent（优先 RAG），跳过 Team Router
     suggestion_agent = (

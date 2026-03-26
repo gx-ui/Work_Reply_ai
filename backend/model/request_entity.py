@@ -39,7 +39,7 @@ class CustomInfo(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    intent: Literal["suggestion", "summary", "auto"] = Field(default="auto", description="请求意图")
+    intent: Literal["suggestion", "summary", "query", "auto"] = Field(default="auto", description="请求意图")
     query: str = Field(default="", description="询问内容")
     works_info: WorksInfo = Field(..., description="工单信息")
     core_info: CoreInfo = Field(default_factory=CoreInfo, description="核心项目信息")

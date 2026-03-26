@@ -286,6 +286,54 @@
     return div.innerHTML;
   }
 
+  // 将纯文本格式化为可读的 HTML（分段、分点）
+  function formatSummaryText(text) {
+    if (!text || text === '--' || text === '待确认' || text === '无') return escapeHtml(text);
+    let s = String(text).trim();
+
+    // 先按已有的换行符拆分
+    let lines = s.split(/\n+/);
+
+    // 如果只有一行（未换行），尝试按编号模式拆分：1. 2. 3. 或 1、2、3、
+    if (lines.length === 1) {
+      lines = s.split(/(?=\d+[.、．]\s*)/).filter(l => l.trim());
+    }
+
+    // 如果仍只有一行，尝试按中文句号/分号拆分长段落为更短的语义段
+    if (lines.length === 1 && s.length > 80) {
+      // 按句号+空格、分号、句号拆分，保留分隔符
+      const parts = s.split(/(?<=[。；;])\s*/).filter(l => l.trim());
+      if (parts.length > 1) {
+        // 将相邻短句合并，避免过度碎片化（目标每段 40-120 字）
+        lines = [];
+        let buf = '';
+        for (const part of parts) {
+          if (buf && (buf + part).length > 100) {
+            lines.push(buf);
+            buf = part;
+          } else {
+            buf += (buf ? '' : '') + part;
+          }
+        }
+        if (buf) lines.push(buf);
+      }
+    }
+
+    // 构建 HTML：编号行加粗，普通行分段
+    const htmlParts = lines.map(line => {
+      const trimmed = line.trim();
+      if (!trimmed) return '';
+      const escaped = escapeHtml(trimmed);
+      // 匹配 "1." "2、" "3．" 等编号开头
+      if (/^\d+[.、．]/.test(trimmed)) {
+        return `<div style="margin:4px 0;padding-left:4px;"><b>${escaped.replace(/^(\d+[.、．]\s*)/, '<span style="color:#e8ddd4;">$1</span>')}</b></div>`;
+      }
+      return `<div style="margin:3px 0;">${escaped}</div>`;
+    });
+
+    return htmlParts.filter(Boolean).join('');
+  }
+
   function renderState(payload = {}) {
     switch (currentState) {
       case AI_STATES.IDLE:
@@ -1756,8 +1804,8 @@
          const sEl = box.querySelector('.ai-summary-info-summary');
          const rEl = box.querySelector('.ai-summary-review');
          
-         if (sEl) sEl.textContent = info_summary || '待确认';
-         if (rEl) rEl.textContent = reviews || review || '无';
+         if (sEl) sEl.innerHTML = formatSummaryText(info_summary || '待确认');
+         if (rEl) rEl.innerHTML = formatSummaryText(reviews || review || '无');
       } else {
          throw new Error('返回数据格式错误');
       }
@@ -1943,6 +1991,7 @@
     const customInput = box.querySelector('.ai-custom-input');
     const queryBtn = box.querySelector('.ai-query-btn');
     const display = box.querySelector('.ai-suggestion-display');
+    const ragContainer = box.querySelector('.ai-rag-references');
 
     const query = customInput ? customInput.value.trim() : '';
     if (!query) {
@@ -1950,29 +1999,82 @@
       return;
     }
 
-    // Loading state
     if (display) display.innerHTML = '<div class="ai-loading"><span class="ai-loading-spinner"></span>AI 正在查询中...</div>';
     if (queryBtn) { queryBtn.disabled = true; queryBtn.textContent = '查询中...'; }
+    if (ragContainer) { ragContainer.classList.remove('visible'); ragContainer.innerHTML = ''; }
 
     try {
-      const snapshot = buildConversationSnapshot();
-      const payload = {
-        ...snapshot,
-        custom_input: query,
+      const ticketData = isWorksheetMode() ? extractTicketData() : null;
+
+      const requestData = {
+        intent: "query",
+        query: query,
+        works_info: {
+          title: ticketData?.title || "",
+          desc: ticketData?.desc || "",
+          tags: ticketData?.tags || [],
+          history: [],
+          custom_input: query,
+          priority: ticketData?.priority ?? null,
+          status: ticketData?.status ?? null
+        },
+        core_info: ticketData?.core_info || {
+          customer_name: "",
+          project_name: "",
+          mall_name: ""
+        },
+        attention_info: ticketData?.attention_info || {
+          project_attention: "",
+          supplier_attention: ""
+        }
       };
-      const backendUrl = (await getBackendUrl()).replace(/\/$/, '');
-      const resp = await fetch(`${backendUrl}/query`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+
+      const apiUrl = resolveChatApiUrl();
+
+      const apiResponse = await new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage({
+          action: 'apiRequest',
+          url: apiUrl,
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: requestData
+        }, (response) => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+            return;
+          }
+          if (response.success) {
+            resolve(response.data);
+          } else {
+            reject(new Error(response.error || 'API请求失败'));
+          }
+        });
       });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data = await resp.json();
-      const result = data.result || data.content || data.answer || JSON.stringify(data);
-      if (display) display.innerHTML = `<div class="ai-suggestion-text">${escapeHtml(result)}</div>`;
+
+      const answer = apiResponse.answer || '';
+      const sources = apiResponse.sources || [];
+
+      if (display) {
+        display.innerHTML = answer
+          ? `<div class="ai-suggestion-text">${escapeHtml(answer)}</div>`
+          : '<div class="ai-suggestion-text">未找到相关信息，请尝试换个关键词查询。</div>';
+      }
+
+      // 展示来源依据
+      if (ragContainer && sources.length > 0) {
+        ragContainer.innerHTML = `<strong>参考来源：</strong><br/>${sources.map(s => `• ${escapeHtml(s)}`).join('<br/>')}`;
+        ragContainer.classList.add('visible');
+      }
+
     } catch (err) {
       log(`查询失败: ${err.message}`, 'error');
-      if (display) display.innerHTML = `<div class="ai-error" style="color:#ffcccb">⚠️ 查询失败：${escapeHtml(err.message)}</div>`;
+      let userMessage = err.message;
+      if (err.message && err.message.includes('502')) {
+        userMessage = "后端模型不可用，请稍后重试";
+      } else if (err.message && (err.message.includes('Failed to fetch') || err.message.includes('fetch'))) {
+        userMessage = "后端服务不可用，请检查网络连接";
+      }
+      if (display) display.innerHTML = `<div class="ai-error" style="color:#ffcccb">⚠️ 查询失败：${escapeHtml(userMessage)}</div>`;
     } finally {
       if (queryBtn) { queryBtn.disabled = false; queryBtn.textContent = '查询'; }
     }
@@ -2087,17 +2189,36 @@
     fillSuggestionKeepDisplay(currentSuggestion);
   }
 
-  // 将建议填入输入框，但保留右侧「工单回复建议」区域的文字不清空
+  // 将建议填入输入框，但保留右侧「工单回复建议」、「信息总结」、「注意事项」区域的内容不清空
   function fillSuggestionKeepDisplay(text) {
+    // 在 fillSuggestion 移除整个建议框之前，先把「信息总结」和「注意事项」的 HTML 快照下来
+    const existingBox = document.querySelector('.ai-suggestion-box');
+    const savedInfoSummaryHtml = existingBox
+      ? (existingBox.querySelector('.ai-summary-info-summary') || {}).innerHTML || '--'
+      : '--';
+    const savedReviewHtml = existingBox
+      ? (existingBox.querySelector('.ai-summary-review') || {}).innerHTML || '--'
+      : '--';
+
+    // 调用原始填充逻辑（会移除建议框并转到 IDLE）
     fillSuggestion(text);
-    
-    // fillSuggestion 会移除建议框并转到 IDLE，这里重新恢复建议展示
-    // 重建建议框并恢复建议内容
+
+    // 重建建议框后，将所有已保存的内容恢复
     const box = getOrCreateSuggestionBox();
     if (box) {
+      // 恢复「工单回复建议」区域
       const summarysuggEl = box.querySelector('.ai-summary-suggestion');
       if (summarysuggEl) summarysuggEl.textContent = text || '--';
-      
+
+      // 恢复「信息总结」（保留格式化 HTML）
+      const infoSummaryEl = box.querySelector('.ai-summary-info-summary');
+      if (infoSummaryEl) infoSummaryEl.innerHTML = savedInfoSummaryHtml;
+
+      // 恢复「注意事项」（保留格式化 HTML）
+      const reviewEl = box.querySelector('.ai-summary-review');
+      if (reviewEl) reviewEl.innerHTML = savedReviewHtml;
+
+      // 恢复按钮状态：「重新生成」+ 显示「采纳」
       const generateBtn = box.querySelector('.ai-generate-btn');
       const acceptBtn = box.querySelector('.ai-accept-btn');
       if (generateBtn) {
@@ -2109,7 +2230,7 @@
         acceptBtn.disabled = false;
       }
     }
-    
+
     // 恢复状态为 SHOWING，防止后续轮询覆盖
     currentState = AI_STATES.SHOWING;
   }
@@ -2438,7 +2559,7 @@
     .ai-summary-content {
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 12px;
     }
 
     .ai-summary-section {
@@ -2463,10 +2584,59 @@
       line-height: 1.5;
       min-height: 20px;
     }
+
+    /* 信息总结和注意事项内容区：超出时出现滚动条，不撑大插件 */
+    .ai-summary-info-summary,
+    .ai-summary-review {
+      max-height: 80px;
+      overflow-y: auto;
+      padding-right: 4px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    /* 滚动条样式 */
+    .ai-summary-info-summary::-webkit-scrollbar,
+    .ai-summary-review::-webkit-scrollbar {
+      width: 4px;
+    }
+    .ai-summary-info-summary::-webkit-scrollbar-track,
+    .ai-summary-review::-webkit-scrollbar-track {
+      background: rgba(255,255,255,0.1);
+      border-radius: 2px;
+    }
+    .ai-summary-info-summary::-webkit-scrollbar-thumb,
+    .ai-summary-review::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,0.35);
+      border-radius: 2px;
+    }
+    .ai-summary-info-summary::-webkit-scrollbar-thumb:hover,
+    .ai-summary-review::-webkit-scrollbar-thumb:hover {
+      background: rgba(255,255,255,0.55);
+    }
     
     .ai-summary-suggestion {
-      color: #2a5caa !important;
+      color:rgb(58, 234, 96) !important;
       font-weight: 500;
+      max-height: 110px;
+      overflow-y: auto;
+      padding-right: 4px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .ai-summary-suggestion::-webkit-scrollbar {
+      width: 4px;
+    }
+    .ai-summary-suggestion::-webkit-scrollbar-track {
+      background: rgba(255,255,255,0.1);
+      border-radius: 2px;
+    }
+    .ai-summary-suggestion::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,0.35);
+      border-radius: 2px;
+    }
+    .ai-summary-suggestion::-webkit-scrollbar-thumb:hover {
+      background: rgba(255,255,255,0.55);
     }
     
     .ai-loading-spinner {
