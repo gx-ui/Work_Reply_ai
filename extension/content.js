@@ -2084,7 +2084,34 @@
 
   function handleAcceptSuggestion() {
     if (!currentSuggestion) return;
-    fillSuggestion(currentSuggestion);
+    fillSuggestionKeepDisplay(currentSuggestion);
+  }
+
+  // 将建议填入输入框，但保留右侧「工单回复建议」区域的文字不清空
+  function fillSuggestionKeepDisplay(text) {
+    fillSuggestion(text);
+    
+    // fillSuggestion 会移除建议框并转到 IDLE，这里重新恢复建议展示
+    // 重建建议框并恢复建议内容
+    const box = getOrCreateSuggestionBox();
+    if (box) {
+      const summarysuggEl = box.querySelector('.ai-summary-suggestion');
+      if (summarysuggEl) summarysuggEl.textContent = text || '--';
+      
+      const generateBtn = box.querySelector('.ai-generate-btn');
+      const acceptBtn = box.querySelector('.ai-accept-btn');
+      if (generateBtn) {
+        generateBtn.textContent = '重新生成';
+        generateBtn.disabled = false;
+      }
+      if (acceptBtn) {
+        acceptBtn.style.display = 'inline-flex';
+        acceptBtn.disabled = false;
+      }
+    }
+    
+    // 恢复状态为 SHOWING，防止后续轮询覆盖
+    currentState = AI_STATES.SHOWING;
   }
 
   function handleCancelGenerate() {
@@ -2435,6 +2462,11 @@
       color: #1f2a3d;
       line-height: 1.5;
       min-height: 20px;
+    }
+    
+    .ai-summary-suggestion {
+      color: #2a5caa !important;
+      font-weight: 500;
     }
     
     .ai-loading-spinner {
