@@ -1,43 +1,34 @@
+import logging
 from typing import Optional, List, Any
 from agno.agent import Agent
 from agno.models.dashscope import DashScope
-from config.config_loader import ConfigLoader
 from prompt.summary_agent_prompt import SUMMARY_AGENT_INSTRUCTIONS
+
+logger = logging.getLogger("summary_agent")
 
 
 class SummaryAgent(Agent):
+    """工单摘要 Agent：可选 Agno MySQLDb 会话持久化。"""
+
     def __init__(
         self,
-        config_loader: Optional[ConfigLoader] = None,
-        api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
-        model_id: Optional[str] = None,
-        toolkits: Optional[List[Any]] = None,
+        model_id: str,
+        api_key: str,
+        base_url: str,
+        tools: Optional[List[Any]] = None,
+        db: Optional[Any] = None,
+        num_history_runs: int = 10,
+
     ):
-        self.config_loader = config_loader or ConfigLoader()
-        llm_config = self.config_loader.get_llm_config()
-        api_key = api_key or llm_config.get("api_key")
-        base_url = base_url or llm_config.get("base_url")
-        # 优先使用专属 summary_model，回退到主模型
-        model_id = model_id or llm_config.get("summary_model") or llm_config.get("model_name")
 
         super().__init__(
+            id="work-reply-ai-summary-agent",
             model=DashScope(id=model_id, api_key=api_key, base_url=base_url),
-            tools=list(toolkits or []),
+            tools=list(tools or []),
             instructions=SUMMARY_AGENT_INSTRUCTIONS,
             markdown=False,
+            db=db,
+            read_chat_history=False,
+            add_history_to_context=True,
+            num_history_runs=num_history_runs,
         )
-
-
-def create_summary_agent(
-    api_key: Optional[str] = None,
-    base_url: Optional[str] = None,
-    model_id: Optional[str] = None,
-    toolkits: Optional[List[Any]] = None,
-) -> Agent:
-    return SummaryAgent(
-        api_key=api_key,
-        base_url=base_url,
-        model_id=model_id,
-        toolkits=toolkits,
-    )

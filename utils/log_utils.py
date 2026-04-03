@@ -1,9 +1,10 @@
+import io
 import logging
 import sys
 
 class ColorFormatter(logging.Formatter):
     """带颜色和 emoji 的日志格式化器"""
-    
+
     COLORS = {
         'DEBUG': '\033[36m',      # 青色
         'INFO': '\033[32m',       # 绿色
@@ -12,7 +13,7 @@ class ColorFormatter(logging.Formatter):
         'CRITICAL': '\033[35m',   # 紫色
     }
     RESET = '\033[0m'
-    
+
     EMOJIS = {
         'DEBUG': '🔍',
         'INFO': '✅',
@@ -20,18 +21,24 @@ class ColorFormatter(logging.Formatter):
         'ERROR': '❌',
         'CRITICAL': '🔥',
     }
-    
+
     def format(self, record):
         color = self.COLORS.get(record.levelname, self.RESET)
         emoji = self.EMOJIS.get(record.levelname, 'ℹ️')
         record.levelname = f"{emoji} {color}{record.levelname}{self.RESET}"
         return super().format(record)
 
+
+def _make_utf8_stream_handler() -> logging.StreamHandler:
+    """创建 UTF-8 编码的 StreamHandler，避免 Windows GBK 控制台编码错误。"""
+    stream = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
+    return logging.StreamHandler(stream)
+
+
 def configure_logging() -> None:
+    handler = _make_utf8_stream_handler()
+    handler.setFormatter(ColorFormatter('%(asctime)s %(levelname)s %(name)s\n%(message)s\n' + '-' * 80))
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s\n%(message)s\n{'-' * 80}",
-        handlers=[logging.StreamHandler(sys.stdout)]
+        handlers=[handler],
     )
-    for handler in logging.root.handlers:
-        handler.setFormatter(ColorFormatter('%(asctime)s %(levelname)s %(name)s\n%(message)s\n' + '-' * 80))

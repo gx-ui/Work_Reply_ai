@@ -11,9 +11,7 @@
         "connection_timeout": 30,
         "read_timeout": 120,
         "max_retries": 3,
-        "retry_delay": 2,
-        "summary_model": "qwen-turbo",
-        "summary_timeout": 60
+        "retry_delay": 2
     },
 
 
@@ -84,7 +82,16 @@
         "port": 3306,
         "user": "root",
         "password": "_AAAByQ0ODAoPeJx9Uk2P",
-        "database": "log_db"
+        "database": "ai"
+    },
+
+    "session_persistence": {
+        "enabled": true,
+        "num_history_runs": 5,
+        "work_reply_session_table": "work_reply_suggestion_session",
+        "work_reply_memory_table": "work_reply_suggestion_memories",
+        "summary_session_table": "work_reply_summary_session",
+        "summary_memory_table": "work_reply_summary_memories"
     },
 
     "output_path": "./outputs"

@@ -1,4 +1,10 @@
-import time
+# -*- coding: utf-8 -*-
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+dst = ROOT / "backend" / "services" / "agent_service.py"
+dst.write_text(
+    r"""import time
 import json
 import logging
 from dataclasses import dataclass
@@ -15,11 +21,7 @@ from tools.rag_retrieval_tool import KnowledgeRetrievalToolkit
 from tools.summary_rag_tools import create_summary_rag_toolkits
 from agent.work_reply_agent import WorkReplyAgent
 from agent.summary_agent import SummaryAgent
-from agent.work_reply_team import (
-    TEAM_ROUTER_INSTRUCTIONS,
-    RESPONSIBILITY_MATRIX,
-    build_work_reply_team_router,
-)
+from agent.work_reply_team import build_work_reply_team_router
 from db.mysql_store import init_mysql_for_agents_from_config
 from utils.milvus_utils import clip_text
 from utils.common import redact_sensitive
@@ -31,28 +33,7 @@ logger = logging.getLogger("agent_service")
 _KNOWLEDGE_SOURCES = ContextVar("knowledge_sources", default=[])
 _STATE_LOCK = RLock()
 
-__all__ = [
-    "TEAM_ROUTER_INSTRUCTIONS",
-    "RESPONSIBILITY_MATRIX",
-    "TracedKnowledgeRetrievalToolkit",
-    "RuntimeState",
-    "init_state",
-    "get_state",
-    "ensure_agents",
-    "ensure_summary_agent",
-    "ensure_agentos_runtime",
-    "get_agentos_app",
-    "agent_run",
-    "team_run",
-    "reset_knowledge_sources",
-    "append_knowledge_sources",
-    "get_knowledge_sources",
-]
 
-
-# ────────────────────────────────────────────────────────────────
-# ContextVar 工具：在 Agent 调用链中收集知识库来源
-# ────────────────────────────────────────────────────────────────
 def reset_knowledge_sources() -> None:
     _KNOWLEDGE_SOURCES.set([])
 
@@ -78,9 +59,6 @@ def get_knowledge_sources() -> List[str]:
     return list(_KNOWLEDGE_SOURCES.get() or [])
 
 
-# ────────────────────────────────────────────────────────────────
-# 带溯源能力的 RAG Toolkit 包装
-# ────────────────────────────────────────────────────────────────
 class TracedKnowledgeRetrievalToolkit(KnowledgeRetrievalToolkit):
     def search_knowledge_base(
         self,
@@ -169,19 +147,12 @@ class TracedKnowledgeRetrievalToolkit(KnowledgeRetrievalToolkit):
         return raw
 
 
-# ────────────────────────────────────────────────────────────────
-# 全局运行时状态
-# ────────────────────────────────────────────────────────────────
 @dataclass
 class RuntimeState:
     config: ConfigLoader
     llm_model: str
     llm_base_url: str
     llm_api_key: str
-    num_history_runs: int = 10
-    mysql_engine: Optional[Any] = None
-    db_work: Optional[Any] = None
-    db_summary: Optional[Any] = None
     agent_rag: Optional[Agent] = None
     agent_plain: Optional[Agent] = None
     agent_summary: Optional[Agent] = None
@@ -189,8 +160,15 @@ class RuntimeState:
     agent_os: Optional[AgentOS] = None
     agent_os_app: Optional[Any] = None
     rag_enabled: bool = False
+    mysql_engine: Any = None
+    db_work_reply: Any = None
+    db_summary: Any = None
+    mysql_persistence_ready: bool = False
+    num_history_runs: int = 10
+
 
 _state: Optional[RuntimeState] = None
+
 
 def init_state() -> RuntimeState:
     global _state
@@ -199,29 +177,25 @@ def init_state() -> RuntimeState:
 
     config = ConfigLoader()
     llm = config.get_llm_config()
-    persist = config.get_session_persistence_config()
 
     model = str(llm.get("model_name") or "qwen-plus")
     base_url = str(llm.get("base_url") or "").rstrip("/")
     api_key = str(llm.get("api_key") or "")
-    num_history_runs = int(persist.get("num_history_runs", 10))
-
-    engine, db_work, db_summary = init_mysql_for_agents_from_config(config)
+    sp = config.get_session_persistence_config()
+    num_hist = int(sp.get("num_history_runs", 10)) if sp else 10
 
     _state = RuntimeState(
         config=config,
         llm_model=model,
         llm_base_url=base_url,
         llm_api_key=api_key,
-        num_history_runs=num_history_runs,
-        mysql_engine=engine,
-        db_work=db_work,
-        db_summary=db_summary,
         agent_rag=None,
         agent_plain=None,
-        rag_enabled=False
+        rag_enabled=False,
+        num_history_runs=num_hist,
     )
     return _state
+
 
 def get_state() -> RuntimeState:
     global _state
@@ -230,35 +204,33 @@ def get_state() -> RuntimeState:
     return _state
 
 
-def _work_reply_agent_kwargs(state: RuntimeState) -> Dict[str, Any]:
-    if state.db_work is None:
-        return {}
-    return {"db": state.db_work, "num_history_runs": state.num_history_runs}
+def _ensure_mysql_stores_locked(state: RuntimeState) -> None:
+    if state.mysql_engine is not None or state.db_work_reply is not None:
+        return
+    engine, db_wr, db_sum = init_mysql_for_agents_from_config(state.config)
+    state.mysql_engine = engine
+    state.db_work_reply = db_wr
+    state.db_summary = db_sum
+    state.mysql_persistence_ready = bool(db_wr is not None and db_sum is not None)
 
 
-def _summary_agent_kwargs(state: RuntimeState) -> Dict[str, Any]:
-    if state.db_summary is None:
-        return {}
-    return {"db": state.db_summary, "num_history_runs": state.num_history_runs}
-
-
-# ────────────────────────────────────────────────────────────────
-# Agent / Team 懒加载
-# ────────────────────────────────────────────────────────────────
 def ensure_agents(allow_rag: bool) -> None:
-    """确保 WorkReplyAgent（plain / rag）已初始化。"""
     state = get_state()
     if state.agent_plain is not None and (not allow_rag or state.agent_rag is not None or not state.rag_enabled):
         return
     with _STATE_LOCK:
-        wr_kw = _work_reply_agent_kwargs(state)
+        _ensure_mysql_stores_locked(state)
+        db_wr = state.db_work_reply
+        nh = state.num_history_runs
         if state.agent_plain is None:
             state.agent_plain = WorkReplyAgent(
                 model_id=state.llm_model,
                 api_key=state.llm_api_key,
                 base_url=state.llm_base_url,
+                agent_id="work-reply-plain",
                 tools=[],
-                **wr_kw,
+                db=db_wr,
+                num_history_runs=nh,
             )
         if allow_rag and state.agent_rag is None:
             try:
@@ -271,8 +243,10 @@ def ensure_agents(allow_rag: bool) -> None:
                     model_id=state.llm_model,
                     api_key=state.llm_api_key,
                     base_url=state.llm_base_url,
+                    agent_id="work-reply-rag",
                     tools=[toolkit_rag],
-                    **wr_kw,
+                    db=db_wr,
+                    num_history_runs=nh,
                 )
                 state.rag_enabled = True
             except Exception as e:
@@ -285,34 +259,28 @@ def ensure_agents(allow_rag: bool) -> None:
 
 
 def ensure_summary_agent() -> None:
-    """
-    确保摘要 Agent 已初始化。
-    优先使用 config 中的 summary_model，回退到主模型。
-    """
     state = get_state()
     if state.agent_summary is not None:
         return
     with _STATE_LOCK:
         if state.agent_summary is not None:
             return
+        _ensure_mysql_stores_locked(state)
         llm_cfg = state.config.get_llm_config()
         summary_model = llm_cfg.get("summary_model") or state.llm_model
         summary_toolkits = create_summary_rag_toolkits(state.config)
-        sum_kw = _summary_agent_kwargs(state)
         state.agent_summary = SummaryAgent(
             model_id=summary_model,
             api_key=state.llm_api_key,
             base_url=state.llm_base_url,
+            agent_id="work-order-summary",
             tools=summary_toolkits,
-            **sum_kw,
+            db=state.db_summary,
+            num_history_runs=state.num_history_runs,
         )
 
 
 def ensure_agentos_runtime(allow_rag: bool) -> None:
-    """
-    构建 AgentOS 运行时并注册 Team 路由器。
-    Team 不负责持久化，仅路由。
-    """
     state = get_state()
     if state.agent_os is not None and state.team_router is not None:
         return
@@ -348,7 +316,6 @@ def ensure_agentos_runtime(allow_rag: bool) -> None:
 
 
 def get_agentos_app(allow_rag: bool = True) -> Optional[Any]:
-    """对外暴露 AgentOS FastAPI 子应用，供主服务挂载。"""
     try:
         ensure_agentos_runtime(allow_rag=allow_rag)
     except Exception as e:
@@ -358,9 +325,6 @@ def get_agentos_app(allow_rag: bool = True) -> Optional[Any]:
     return state.agent_os_app
 
 
-# ────────────────────────────────────────────────────────────────
-# Agent / Team 运行辅助（线程池 + ContextVar 传播）
-# ────────────────────────────────────────────────────────────────
 _EXECUTOR = ThreadPoolExecutor(max_workers=10)
 
 
@@ -370,29 +334,27 @@ async def agent_run(
     *,
     session_id: Optional[str] = None,
 ) -> str:
-    """在线程池中执行 Agent.run，避免阻塞事件循环。"""
     loop = asyncio.get_running_loop()
     ctx = copy_context()
 
-    def _run() -> Any:
-        return agent.run(prompt, session_id=session_id)
+    def _run():
+        kw: Dict[str, Any] = {}
+        if session_id:
+            kw["session_id"] = session_id
+        if kw:
+            return agent.run(prompt, **kw)
+        return agent.run(prompt)
 
     result = await loop.run_in_executor(_EXECUTOR, ctx.run, _run)
     return str(result.content).strip()
 
 
-async def team_run(
-    team: Team,
-    prompt: str,
-    *,
-    session_id: Optional[str] = None,
-) -> str:
-    """在线程池中执行 Team.run，用于 Team 意图分发场景。"""
+async def team_run(team: Team, prompt: str) -> str:
     loop = asyncio.get_running_loop()
     ctx = copy_context()
-
-    def _run() -> Any:
-        return team.run(prompt, session_id=session_id)
-
-    result = await loop.run_in_executor(_EXECUTOR, ctx.run, _run)
+    result = await loop.run_in_executor(_EXECUTOR, ctx.run, team.run, prompt)
     return str(result.content).strip()
+""",
+    encoding="utf-8",
+)
+print("wrote agent_service.py")

@@ -7,10 +7,10 @@ class WorksInfo(BaseModel):
     工单信息类：描述工单的上下文信息
     """
     title: str = Field(default="", description="工单标题")
+    ticket_id: str = Field(default="", description="工单ID")
     desc: str = Field(..., description="工单直接描述的内容")
     tags: List[str] = Field(default_factory=list, description="工单标签列表")
     history: List[Dict[str, Any]] = Field(default_factory=list, description="工单历史交互信息")
-    custom_input: str = Field(default="", description="客服补充输入的信息")
     priority: Optional[str] = Field(default=None, description="优先级")
     status: Optional[str] = Field(default=None, description="工单状态")
 
@@ -31,17 +31,17 @@ class AttentionInfo(BaseModel):
     project_attention: str = Field(default="", description="项目注意事项")
     supplier_attention: str = Field(default="", description="供应商注意事项")
 
-class CustomInfo(BaseModel):
+class QueryInfo(BaseModel):
     """
-    客服补充输入的信息类：描述客服补充的输入信息
+    查询问题类：描述客服查询的问题
     """
-    custom_input: str = Field(default="", description="客服补充输入的信息")
+    query: str = Field(default="", description="客服询问的问题")
 
 
 class ChatRequest(BaseModel):
     intent: Literal["suggestion", "summary", "query", "auto"] = Field(default="auto", description="请求意图")
-    query: str = Field(default="", description="询问内容")
+    session_id: Optional[str] = Field(default=None, description="Agno 会话 ID，多轮对话时保持稳定")
     works_info: WorksInfo = Field(..., description="工单信息")
     core_info: CoreInfo = Field(default_factory=CoreInfo, description="核心项目信息")
     attention_info: AttentionInfo = Field(default_factory=AttentionInfo, description="注意事项")
-    custom_info: CustomInfo = Field(default_factory=CustomInfo, description="客服补充输入的信息")
+    query_info: QueryInfo = Field(default_factory=QueryInfo, description="客服查询问题")

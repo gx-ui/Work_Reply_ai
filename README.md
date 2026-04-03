@@ -112,8 +112,8 @@ pip install fastapi uvicorn pydantic agno pymilvus openai dashscope
 
 ```bash
 cd work_reply_ai
-cd backend
-uvicorn app:app --reload --host 0.0.0.0 --port 8003
+
+uvicorn backend.app:app --reload --host 0.0.0.0 --port 8003
 ```
 
 ### 4. 调用 API
@@ -125,15 +125,18 @@ curl -X POST "http://localhost:8003/work_reply_ai/chat" \
   -H "Content-Type: application/json" \
   -d '{
     "intent": "suggestion",
-    "query": "请生成回复建议",
+    "session_id": "182192792",
+    "query_info": {
+      "query": "请生成回复建议"
+    },
     "works_info": {
+      "ticket_id": "182192792",
       "title": "南网异常件3.10（超时未签收）",
       "desc": "用户反馈超时未签收，要求尽快处理",
       "tags": ["公司级核心项目"],
       "history": [
         {"index": 1, "summary": "今天 17:08回复了工单：已发短信提醒客户及时取件。"}
       ],
-      "custom_input": "",
       "priority": "高",
       "status": "处理中"
     },
@@ -170,9 +173,10 @@ POST /work_reply_ai/chat
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| intent | string | suggestion / summary / auto |
-| query | string | 用户补充输入 |
-| works_info | object | 工单信息 |
+| intent | string | suggestion / summary / query / auto |
+| session_id | string | 可选，与会话绑定； |
+| query_info | object | `query`：与意图相关的询问/补充文本 |
+| works_info | object | 工单信息（含 `ticket_id`、title、desc 等） |
 | core_info | object | 核心项目信息 |
 | attention_info | object | 注意事项 |
 

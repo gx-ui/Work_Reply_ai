@@ -7,7 +7,6 @@ from agno.tools import Toolkit
 ContentDict = Dict[str, Union[str, Dict[str, str]]]
 from utils.common import redact_sensitive
 import logging
-import sys
 
 """
 ⚠️ LLM 模型选择注意：
@@ -20,12 +19,6 @@ Agent 自主决定是否调用工具，实测结论：
 
 
 logger = logging.getLogger("rag_retrieval_tool")
-logger.propagate = False
-if not logger.handlers:
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(logging.Formatter('%(asctime)s\n%(message)s\n' + '-' * 80))
-    logger.addHandler(handler)
-    logger.setLevel(logging.INFO)
 
 
 class KnowledgeRetrievalTool:
@@ -236,7 +229,6 @@ class KnowledgeRetrievalToolkit(Toolkit):
           - 涉及业务流程：退款、补发、少发、换货、物流异常、质检标准、后台操作步骤
           - 需确认项目特定口径：某 customer_name / project_name / mall_name 的特殊处理规范
           - WORKS_INFO 的 desc 包含具体订单号/商品名称且需给出处理建议
-          - CUSTOM_INPUT 中客服明确要求查询或核实某项信息
 
         ❌ 不需要调用的场景：
           - 纯告知类回复（如"已收到工单，请耐心等待"）
@@ -249,7 +241,6 @@ class KnowledgeRetrievalToolkit(Toolkit):
                 构造原则：
                   - 主体：从 WORKS_INFO 的 title/desc 提取核心意图词
                     （少发/补发/退款/退换货/物流异常/质量问题/时效等）
-                  - 补充：CUSTOM_INPUT 中的关键词
                   - 禁止：将 customer_name/project_name 放入 query
                     （这些应作为 file_name_filters 使用）
                 示例：

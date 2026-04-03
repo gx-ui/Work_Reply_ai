@@ -554,14 +554,20 @@
 
       const box = getOrCreateSuggestionBox();
       if (!box) return;
-      box.querySelector('.ai-suggestion-content').innerHTML = `
+      const suggContent = box.querySelector('.ai-suggestion-content');
+      const suggActions = box.querySelector('.ai-suggestion-actions');
+      if (suggContent) {
+        suggContent.innerHTML = `
         检测到工单内容更新，可点击“手动生成建议”获取最新建议
       `;
-      box.querySelector('.ai-suggestion-actions').innerHTML = `
+      }
+      if (suggActions) {
+        suggActions.innerHTML = `
         <button class="ai-manual-btn">手动生成建议</button>
       `;
+      }
       const manualBtn = box.querySelector('.ai-manual-btn');
-      manualBtn.addEventListener('click', () => handleManualGenerate());
+      if (manualBtn) manualBtn.addEventListener('click', () => handleManualGenerate());
     }, 400);
   }
 
@@ -592,6 +598,8 @@
       if (id && id !== 'undefined' && id !== 'null') return String(id);
     } catch (e) {
     }
+    const domId = extractTicketIdFromFishdForm();
+    if (domId) return String(domId);
     const titleEl = document.querySelector('.m-sheet-main .sheet-title .fishd-ellipsis-ellipsis');
     const title = titleEl ? (titleEl.innerText || titleEl.textContent || '').trim() : '';
     return title ? `title:${title}` : '';
@@ -1040,6 +1048,51 @@
     console.groupEnd();
   }
 
+  /**
+   * 从工单属性区抓取工单 ID（新版 fishd 表单：.fishd-form-item-control → .value-show）
+   */
+  function extractTicketIdFromFishdForm() {
+    const scope =
+      document.querySelector('.m-sheet-propertes') ||
+      document.querySelector('.m-detail-content-wrapper') ||
+      document.body;
+    const labelMatches = (text) => {
+      const t = String(text || '').trim();
+      if (!t) return false;
+      return (
+        /工单\s*(?:ID|id|编号|单号)/i.test(t) ||
+        /^工单编号$/i.test(t) ||
+        /^工单号$/i.test(t) ||
+        /^ID$/i.test(t)
+      );
+    };
+    const labels = scope.querySelectorAll(
+      'label[title], .fishd-form-item-label label, label.fishd-form-item-required'
+    );
+    for (let i = 0; i < labels.length; i++) {
+      const lab = labels[i];
+      const labelText = (lab.getAttribute('title') || lab.innerText || lab.textContent || '').trim();
+      if (!labelMatches(labelText)) continue;
+      const row = lab.closest('.fishd-row') || lab.closest('.fishd-form-item');
+      if (!row) continue;
+      const valueEl = row.querySelector(
+        '.fishd-form-item-control .fishd-form-item-children span.value-show, .fishd-form-item-control span.value-show'
+      );
+      if (valueEl) {
+        const v = (valueEl.textContent || '').trim();
+        if (v) return v;
+      }
+    }
+    const valueShows = scope.querySelectorAll(
+      '.fishd-form-item-control .fishd-form-item-children span.value-show'
+    );
+    for (let j = 0; j < valueShows.length; j++) {
+      const v = (valueShows[j].textContent || '').trim();
+      if (/^\d{5,24}$/.test(v)) return v;
+    }
+    return '';
+  }
+
   function extractTicketData() {
     const ticketIdFromQuery = new URLSearchParams(window.location.search).get('id');
     // 适配新版 DOM，将 `.m-sheet-propertes` 视为主要工单容器
@@ -1131,7 +1184,16 @@
     if (supplierAttention) parts.push(`供应商注意事项：${supplierAttention}`);
     if (tags.length > 0) parts.push(`工单标签：${tags.join('、')}`);
 
+    const ticketIdFromDom = extractTicketIdFromFishdForm();
+    const ticket_id = (
+      (ticketIdFromDom && String(ticketIdFromDom).trim()) ||
+      (ticketNo && String(ticketNo).trim()) ||
+      (ticketIdFromQuery && String(ticketIdFromQuery).trim()) ||
+      ''
+    );
+
     return {
+      ticket_id,
       title,
       desc,
       priority: priority || null,
@@ -1452,14 +1514,17 @@
       // 显示加载状态
       showLoadingState(options.message);
 
-      // 获取客服输入的补充信息
-      const customInputEl = document.querySelector('.ai-custom-input');
-      const customInputText = customInputEl ? (customInputEl.value || '').trim() : '';
+      const ticketIdStr =
+        ticketData && ticketData.ticket_id ? String(ticketData.ticket_id).trim() : '';
 
       const requestData = {
         intent: "suggestion",
-        query: messages.length > 0 ? messages[messages.length - 1].content : "",
+        ...(ticketIdStr ? { session_id: ticketIdStr } : {}),
+        query_info: {
+          query: messages.length > 0 ? messages[messages.length - 1].content : "",
+        },
         works_info: {
+          ticket_id: ticketIdStr,
           title: ticketData?.title || "",
           desc: ticketData?.desc || (messages.length > 0 ? messages[messages.length - 1].content : ""),
           tags: ticketData?.tags || [],
@@ -1471,7 +1536,6 @@
               }))
               .filter(row => row.summary)
             : [],
-          custom_input: customInputText,
           priority: ticketData?.priority ?? null,
           status: ticketData?.status ?? null
         },
@@ -1728,13 +1792,13 @@
     const summaryContent = box.querySelector('.ai-summary-content');
     const summaryBtn = box.querySelector('.ai-summary-btn');
     
-    // Set loading state for right column
+    // 信息总结按钮与展示区在左栏
     if (summaryBtn) {
         summaryBtn.disabled = true;
         summaryBtn.innerHTML = '<span class="ai-loading-spinner"></span>生成中...';
     }
     
-    // Show loading in right column fields
+    // 左栏：信息总结 / 注意事项加载态
     const fields = ['info-summary', 'review'];
     fields.forEach(field => {
         const el = box.querySelector(`.ai-summary-${field}`);
@@ -1748,11 +1812,17 @@
       
       const worksheetMode = isWorksheetMode();
       const ticketData = worksheetMode ? extractTicketData() : null;
+      const ticketIdStr =
+        ticketData && ticketData.ticket_id ? String(ticketData.ticket_id).trim() : '';
 
       const requestData = {
         intent: "summary",
-        query: messages.length > 0 ? messages[messages.length - 1].content : "",
+        ...(ticketIdStr ? { session_id: ticketIdStr } : {}),
+        query_info: {
+          query: messages.length > 0 ? messages[messages.length - 1].content : "",
+        },
         works_info: {
+          ticket_id: ticketIdStr,
           title: ticketData?.title || "",
           desc: ticketData?.desc || "",
           tags: ticketData?.tags || [],
@@ -1764,7 +1834,6 @@
               }))
               .filter(row => row.summary)
             : [],
-          custom_input: "",
           priority: ticketData?.priority ?? null,
           status: ticketData?.status ?? null
         },
@@ -1850,39 +1919,10 @@
         </div>
 
         <div class="ai-layout-container">
-          <!-- Left Column -->
+          <!-- 左栏 40%：信息总结区 -->
           <div class="ai-left-column">
-            <div class="ai-column-header">查询结果：</div>
-            <div class="ai-suggestion-display">
-               <div class="ai-suggestion-text">可为您生成查询内容</div>
-            </div>
-            
-            <div class="ai-input-label">输入框：</div>
-            <textarea class="ai-custom-input" placeholder="在此输入补充信息/限制..."></textarea>
-            
-            <div class="ai-actions-row">
-              <button class="ai-btn ai-btn-primary ai-query-btn">查询</button>
-              <button class="ai-btn ai-btn-secondary ai-summary-btn">信息总结</button>
-              <button class="ai-btn ai-btn-text ai-hide-btn" style="border:none; background:transparent; opacity:0.8; color:white;">隐藏</button>
-              
-              <div class="ai-rag-references"></div>
-            </div>
-          </div>
-
-          <!-- Right Column -->
-          <div class="ai-right-column">
-            <div class="ai-column-header">工单信息总结</div>
+            <div class="ai-column-header">信息总结</div>
             <div class="ai-summary-content">
-              <div class="ai-summary-section">
-                  <div class="ai-summary-label" style="display:flex;align-items:center;justify-content:space-between;">
-                    <span>工单回复建议：</span>
-                    <div class="ai-suggestion-actions" style="display:flex;align-items:center;gap:8px;">
-                      <button class="ai-btn ai-btn-primary ai-generate-btn" style="font-size:12px;padding:3px 10px;">生成建议</button>
-                      <button class="ai-btn ai-btn-secondary ai-accept-btn" style="font-size:12px;padding:3px 10px;display:none;">采纳</button>
-                    </div>
-                  </div>
-                  <div class="ai-summary-value ai-summary-suggestion">--</div>
-              </div>
               <div class="ai-summary-section">
                   <div class="ai-summary-label">信息总结：</div>
                   <div class="ai-summary-value ai-summary-info-summary">--</div>
@@ -1890,6 +1930,39 @@
               <div class="ai-summary-section">
                   <div class="ai-summary-label">注意事项：</div>
                   <div class="ai-summary-value ai-summary-review">--</div>
+              </div>
+            </div>
+            <div class="ai-actions-row ai-actions-row-summary">
+              <button class="ai-btn ai-btn-secondary ai-summary-btn">信息总结</button>
+            </div>
+          </div>
+
+          <!-- 中栏 40%：查询任务区 -->
+          <div class="ai-center-column">
+            <div class="ai-column-header">查询结果：</div>
+            <div class="ai-suggestion-display">
+               <div class="ai-suggestion-text">可为您生成查询内容</div>
+            </div>
+            
+            <div class="ai-input-label">输入框：</div>
+            <textarea class="ai-custom-input" placeholder="知识库查询：输入问题后点击「查询」"></textarea>
+            
+            <div class="ai-actions-row ai-actions-row-query">
+              <button class="ai-btn ai-btn-primary ai-query-btn">查询</button>
+              <div class="ai-rag-references"></div>
+            </div>
+          </div>
+
+          <!-- 右栏 20%：工单回复建议区 -->
+          <div class="ai-right-column">
+            <div class="ai-column-header">工单回复建议</div>
+            <div class="ai-suggestion-content"></div>
+            <div class="ai-input-label ai-suggestion-block-label">工单回复建议：</div>
+            <div class="ai-summary-value ai-summary-suggestion">--</div>
+            <div class="ai-actions-row ai-actions-row-suggestion">
+              <div class="ai-suggestion-actions" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                <button class="ai-btn ai-btn-primary ai-generate-btn ai-btn-compact">生成建议</button>
+                <button class="ai-btn ai-btn-secondary ai-accept-btn ai-btn-compact" style="display:none;">采纳</button>
               </div>
             </div>
           </div>
@@ -1902,7 +1975,6 @@
       const acceptBtn = box.querySelector('.ai-accept-btn');
       const queryBtn = box.querySelector('.ai-query-btn');
       const summaryBtn = box.querySelector('.ai-summary-btn');
-      const hideBtn = box.querySelector('.ai-hide-btn');
       const customInput = box.querySelector('.ai-custom-input');
       const minimizedView = box.querySelector('.ai-minimized-view');
 
@@ -1912,7 +1984,6 @@
       };
 
       closeIcon.addEventListener('click', toggleMinimize);
-      hideBtn.addEventListener('click', toggleMinimize);
       minimizedView.addEventListener('click', toggleMinimize);
       
       generateBtn.addEventListener('click', () => handleManualGenerate());
@@ -1924,7 +1995,7 @@
 
       // Input persistence
       if (customInput) {
-        const key = 'ai_custom_input_' + (lastWorksheetTicketId || 'default');
+        const key = 'ai_kb_query_draft_' + (lastWorksheetTicketId || 'default');
         const savedInput = sessionStorage.getItem(key);
         if (savedInput) customInput.value = savedInput;
         customInput.addEventListener('input', () => {
@@ -1954,7 +2025,6 @@
     // Ensure event listeners are attached (for existing box)
     if (box && !box.dataset.listenersAttached) {
        const closeIcon = box.querySelector('.ai-close-icon');
-       const hideBtn = box.querySelector('.ai-hide-btn');
        const minimizedView = box.querySelector('.ai-minimized-view');
        
        const toggleMinimize = (e) => {
@@ -1966,11 +2036,6 @@
            const newClose = closeIcon.cloneNode(true);
            closeIcon.parentNode.replaceChild(newClose, closeIcon);
            newClose.addEventListener('click', toggleMinimize);
-       }
-       if (hideBtn) {
-           const newHide = hideBtn.cloneNode(true);
-           hideBtn.parentNode.replaceChild(newHide, hideBtn);
-           newHide.addEventListener('click', toggleMinimize);
        }
        if (minimizedView) {
            // Replace minimized view to clear listeners if any
@@ -2005,16 +2070,19 @@
 
     try {
       const ticketData = isWorksheetMode() ? extractTicketData() : null;
+      const ticketIdStr =
+        ticketData && ticketData.ticket_id ? String(ticketData.ticket_id).trim() : '';
 
       const requestData = {
         intent: "query",
-        query: query,
+        ...(ticketIdStr ? { session_id: ticketIdStr } : {}),
+        query_info: { query },
         works_info: {
+          ticket_id: ticketIdStr,
           title: ticketData?.title || "",
           desc: ticketData?.desc || "",
           tags: ticketData?.tags || [],
           history: [],
-          custom_input: query,
           priority: ticketData?.priority ?? null,
           status: ticketData?.status ?? null
         },
@@ -2132,7 +2200,7 @@
     const summarysuggEl = box.querySelector('.ai-summary-suggestion');
     if (summarysuggEl) summarysuggEl.textContent = suggestionText || '--';
     
-    // RAG References（保留在左侧查询区）
+    // RAG References（中间查询区）
     const ragContainer = box.querySelector('.ai-rag-references');
     const knowledgeSources = options.knowledgeSources || currentKnowledgeSources || [];
     if (ragContainer) {
@@ -2189,7 +2257,7 @@
     fillSuggestionKeepDisplay(currentSuggestion);
   }
 
-  // 将建议填入输入框，但保留右侧「工单回复建议」、「信息总结」、「注意事项」区域的内容不清空
+  // 将建议填入输入框，但保留「工单回复建议」（右栏）、「信息总结/注意事项」（左栏）区域的内容不清空
   function fillSuggestionKeepDisplay(text) {
     // 在 fillSuggestion 移除整个建议框之前，先把「信息总结」和「注意事项」的 HTML 快照下来
     const existingBox = document.querySelector('.ai-suggestion-box');
@@ -2319,6 +2387,7 @@
   // ========== 样式注入 ==========
   const style = document.createElement('style');
   style.textContent = `
+    /* 字体层级：L1 栏标题 16/700 · L2 字段标签 13/600 · L3 正文 13/400~500 · L4 辅助 12/500 · 按钮 13/600 */
     .ai-suggestion-box {
       background: linear-gradient(135deg, #6F63E9 0%, #A85AD8 100%);
       border-radius: 12px;
@@ -2326,6 +2395,9 @@
       margin: 16px 0;
       color: white;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      font-size: 13px;
+      line-height: 1.5;
+      font-weight: 400;
       box-shadow: 0 8px 24px rgba(0,0,0,0.15);
       position: relative;
       z-index: 1000;
@@ -2354,7 +2426,7 @@
         gap: 12px;
         font-weight: 600;
         color: white;
-        font-size: 14px;
+        font-size: 13px;
         width: 100%;
       }
 
@@ -2384,24 +2456,48 @@
 
     .ai-layout-container {
       display: flex;
-      gap: 32px;
-      align-items: flex-start;
+      gap: 20px;
+      align-items: stretch;
+      width: 100%;
+      box-sizing: border-box;
     }
 
-    /* Left Column */
+    /* 左 40% / 中 40% / 右 20%（flex 2:2:1） */
     .ai-left-column {
-      flex: 3;
+      flex: 2 1 0;
       display: flex;
       flex-direction: column;
       gap: 16px;
-      padding-right: 32px;
+      padding-right: 10px;
       border-right: 1px solid rgba(255,255,255,0.15);
-      min-width: 0; /* Prevent flex overflow */
+      min-width: 0;
+      box-sizing: border-box;
+    }
+
+    .ai-center-column {
+      flex: 2 1 0;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 0 10px;
+      border-right: 1px solid rgba(255,255,255,0.15);
+      min-width: 0;
+      box-sizing: border-box;
+    }
+
+    .ai-suggestion-content {
+      line-height: 1.5;
+      color: rgba(255,255,255,0.95);
+      min-height: 0;
+    }
+    .ai-suggestion-content:empty {
+      display: none;
     }
 
     .ai-column-header {
       font-size: 16px;
       font-weight: 700;
+      line-height: 1.35;
       margin-bottom: 4px;
       color: white;
       letter-spacing: 0.5px;
@@ -2410,44 +2506,21 @@
     .ai-suggestion-display {
       background: rgba(255,255,255,0.15);
       border-radius: 8px;
-      padding: 16px;
+      padding: 8px;
       min-height: 80px;
-      font-size: 14px;
-      line-height: 1.6;
+      font-size: 13px;
+      font-weight: 400;
+      line-height: 1.55;
       backdrop-filter: blur(4px);
       color: white;
       white-space: pre-wrap;
       box-shadow: inset 0 1px 4px rgba(0,0,0,0.05);
     }
     
-    .ai-rag-references {
-      font-size: 12px;
-      color: rgba(255,255,255,0.8);
-      background: rgba(0,0,0,0.1);
-      padding: 6px 10px;
-      border-radius: 6px;
-      display: none; /* Default hidden */
-      max-width: 260px;
-      max-height: 48px;
-      overflow-y: auto;
-      line-height: 1.4;
-      flex-grow: 1;
-      margin-left: 4px;
-    }
-    .ai-rag-references::-webkit-scrollbar {
-      width: 4px;
-    }
-    .ai-rag-references::-webkit-scrollbar-thumb {
-      background: rgba(255,255,255,0.3);
-      border-radius: 2px;
-    }
-    .ai-rag-references.visible {
-      display: block;
-    }
-
     .ai-input-label {
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 600;
+      line-height: 1.4;
       color: white;
       margin-top: 4px;
     }
@@ -2457,9 +2530,10 @@
       background: rgba(255,255,255,0.95);
       border: 1px solid rgba(255,255,255,0.3);
       border-radius: 8px;
-      padding: 12px;
+      padding: 8px;
       color: #333;
-      font-size: 14px;
+      font-size: 13px;
+      font-weight: 400;
       resize: vertical;
       min-height: 60px;
       font-family: inherit;
@@ -2478,24 +2552,40 @@
     .ai-actions-row {
       display: flex;
       gap: 12px;
-      margin-top: 8px;
       flex-wrap: wrap;
-      align-items: center;
+      align-items: flex-start;
     }
-    
+
+    /* 三栏等高（stretch）时，主操作行沉底，与「_query」按钮同一基准线对齐 */
+    .ai-actions-row-query,
+    .ai-actions-row-summary,
+    .ai-actions-row-suggestion {
+      margin-top: auto;
+      padding-top: 2px;
+    }
+
+    .ai-actions-row-query .ai-rag-references {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .ai-suggestion-block-label {
+      margin-top: 4px;
+      margin-bottom: 0;
+    }
+
     .ai-rag-references {
       font-size: 12px;
       color: rgba(255,255,255,0.8);
       background: rgba(0,0,0,0.1);
       padding: 6px 10px;
       border-radius: 6px;
-      display: none; /* Default hidden */
-      max-width: 260px;
-      max-height: 48px;
+      display: none;
+      max-width: 100%;
+      max-height: 72px;
       overflow-y: auto;
       line-height: 1.4;
-      flex-grow: 1;
-      margin-left: 4px;
+      box-sizing: border-box;
     }
     .ai-rag-references::-webkit-scrollbar {
       width: 4px;
@@ -2507,17 +2597,43 @@
     .ai-rag-references.visible {
       display: block;
     }
-      padding: 8px 20px;
+
+    .ai-btn {
+      padding: 8px 18px;
       border-radius: 6px;
       border: none;
       cursor: pointer;
-      font-size: 14px;
-      font-weight: 500;
+      font-size: 13px;
+      font-weight: 600;
       transition: all 0.2s;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      height: 36px;
+      height: 34px;
+      box-sizing: border-box;
+    }
+
+    .ai-btn-compact {
+      padding: 6px 10px;
+      height: 32px;
+      font-weight: 600;
+    }
+
+    .ai-loading {
+      font-size: inherit;
+      font-weight: 400;
+    }
+
+    .ai-manual-btn {
+      font-size: 13px;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      background: white;
+      color: #764ba2;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
     }
     .ai-btn:disabled {
       opacity: 0.6;
@@ -2540,20 +2656,21 @@
       background: rgba(255,255,255,0.2);
       color: white;
       border: 1px solid rgba(255,255,255,0.3);
+      font-weight: 500;
     }
     .ai-btn-secondary:hover:not(:disabled) {
       background: rgba(255,255,255,0.3);
       border-color: rgba(255,255,255,0.4);
     }
 
-    /* Right Column */
     .ai-right-column {
-      flex: 2;
+      flex: 1 1 0;
       display: flex;
       flex-direction: column;
-      gap: 20px;
-      padding-top: 0;
+      gap: 12px;
+      padding-left: 10px;
       min-width: 0;
+      box-sizing: border-box;
     }
 
     .ai-summary-content {
@@ -2564,24 +2681,26 @@
 
     .ai-summary-section {
       border-bottom: 1px solid rgba(255,255,255,0.15);
-      padding-bottom: 12px;
+      padding-bottom: 6px;
     }
     .ai-summary-section:last-child {
       border-bottom: none;
     }
 
     .ai-summary-label {
-      font-size: 14px;
-      font-weight: 700;
-      color:rgb(227, 221, 212);
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.4;
+      color: rgb(227, 221, 212);
       margin-bottom: 6px;
       opacity: 1;
     }
 
     .ai-summary-value {
-      font-size: 14px;
+      font-size: 13px;
+      font-weight: 400;
       color: #1f2a3d;
-      line-height: 1.5;
+      line-height: 1.55;
       min-height: 20px;
     }
 
@@ -2616,8 +2735,10 @@
     }
     
     .ai-summary-suggestion {
-      color:rgb(58, 234, 96) !important;
+      font-size: 13px;
+      color: rgb(58, 234, 96) !important;
       font-weight: 500;
+      line-height: 1.55;
       max-height: 110px;
       overflow-y: auto;
       padding-right: 4px;
@@ -2654,17 +2775,25 @@
       to { transform: rotate(360deg); }
     }
 
-    /* Responsive */
-    @media (max-width: 756px) {
+    @media (max-width: 900px) {
       .ai-layout-container {
         flex-direction: column;
-        gap: 24px;
+        gap: 20px;
       }
-      .ai-left-column {
+      .ai-left-column,
+      .ai-center-column,
+      .ai-right-column {
+        flex: 1 1 auto;
+        max-width: 100%;
         border-right: none;
-        border-bottom: 1px solid rgba(255,255,255,0.15);
+        padding-left: 0;
         padding-right: 0;
-        padding-bottom: 24px;
+        border-bottom: 1px solid rgba(255,255,255,0.15);
+        padding-bottom: 16px;
+      }
+      .ai-right-column {
+        border-bottom: none;
+        padding-bottom: 0;
       }
     }
   `;

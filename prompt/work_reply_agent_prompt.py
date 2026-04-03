@@ -33,11 +33,6 @@ WORK_REPLY_PROMPT_TEMPLATE = """
 商城名称：{mall_name}
 </CORE_INFO>
 
-# 客服补充信息
-<CUSTOM_INPUT>
-{custom_input}
-</CUSTOM_INPUT>
-
 # 历史处理记录
 <HISTORY>
 {history}
@@ -51,14 +46,12 @@ WORK_REPLY_PROMPT_TEMPLATE = """
 在内部识别以下信息（不输出）：
 - 主诉类型：从 WORKS_INFO 的 title/desc 中提取核心诉求（退款/补发/少发/换货/投诉/查询/物流异常等）
 - 项目归属：从 CORE_INFO 中的 customer_name 和 project_name 识别所属项目（用于后续知识库文件名过滤）
-- 客服意图：检查 CUSTOM_INPUT，若有内容则优先参考（客服补充的处理方向或特殊要求）
 
 ## Step 2：判断是否需要调用工具
 满足以下任一条件时，必须调用知识库工具：
 - 涉及具体业务流程：退款、补发、少发、换货、物流异常、质检、后台操作、时效规则
 - 需要确认项目特定口径：某 customer_name/project_name/mall_name 的特殊处理规范
 - 工单描述包含具体订单号/商品名称且需要给出处理建议
-- CUSTOM_INPUT 中明确要求查询或核实
 
 不需要调用工具的情况：
 - 纯告知类工单内容描述（如"已收到工单"）
@@ -70,8 +63,7 @@ WORK_REPLY_PROMPT_TEMPLATE = """
 ### 3-1 构造检索 query
 优先级从高到低：
 1. title + desc 中的核心意图词（少发/补发/退款/退换货/物流异常等）-> query 主体
-2. CUSTOM_INPUT 中的关键词 -> 补充意图
-3. HISTORY 中的关键结论 ← 仅补充上下文，不替代主诉
+2. HISTORY 中的关键结论 ← 仅补充上下文，不替代主诉
 （customer_name/project_name 不放入 query，用于 file_name 过滤）
 
 示例：

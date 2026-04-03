@@ -1,38 +1,49 @@
+"""
+独立 AgentOS 启动入口（仅用于调试/独立部署）。
+生产环境请使用 backend/app.py 中通过 agent_service.py 初始化的 AgentOS。
+"""
 import os
-from agno.models.dashscope import DashScope
 from agno.os import AgentOS
-from agno.team import Team
 from agent.work_reply_agent import WorkReplyAgent
 from agent.summary_agent import SummaryAgent
+from agent.work_reply_team import build_work_reply_team_router
 from config.config_loader import ConfigLoader
-
+from db.mysql_store import init_mysql_for_agents_from_config
 
 
 def build_agentos() -> AgentOS:
-    """
-    构建 AgentOS 实例。
-    Team 作为统一入口，在建议 Agent 与摘要 Agent 间执行意图分发。
-    """
     config_loader = ConfigLoader()
     llm_config = config_loader.get_llm_config()
-    suggestion_agent = WorkReplyAgent(config_loader=config_loader)
-    summary_agent = SummaryAgent(config_loader=config_loader)
-    team_router = Team(
-        name="work-reply-team-router",
-        members=[suggestion_agent, summary_agent],
-        model=DashScope(
-            id=str(llm_config.get("model_name") or "qwen-plus"),
-            api_key=str(llm_config.get("api_key") or ""),
-            base_url=str(llm_config.get("base_url") or "").rstrip("/"),
-        ),
-        instructions=[
-            "你是工单智能分发 Team 负责人。",
-            "涉及总结、摘要、归纳时，将任务分配给 SummaryAgent。",
-            "涉及回复建议、话术生成时，将任务分配给 WorkReplyAgent。",
-            "输出最终结果时保持纯文本，不要添加代码块。",
-        ],
-        respond_directly=True,
-        markdown=False,
+    persist = config_loader.get_session_persistence_config()
+
+    model_id = str(llm_config.get("model_name") or "qwen-plus")
+    summary_model = str(llm_config.get("summary_model") or model_id)
+    api_key = str(llm_config.get("api_key") or "")
+    base_url = str(llm_config.get("base_url") or "").rstrip("/")
+    num_history_runs = int(persist.get("num_history_runs", 10))
+
+    _engine, db_work, db_summary = init_mysql_for_agents_from_config(config_loader)
+    wr_kw = {"db": db_work, "num_history_runs": num_history_runs} if db_work else {}
+    sum_kw = {"db": db_summary, "num_history_runs": num_history_runs} if db_summary else {}
+
+    suggestion_agent = WorkReplyAgent(
+        model_id=model_id,
+        api_key=api_key,
+        base_url=base_url,
+        **wr_kw,
+    )
+    summary_agent = SummaryAgent(
+        model_id=summary_model,
+        api_key=api_key,
+        base_url=base_url,
+        **sum_kw,
+    )
+    team_router = build_work_reply_team_router(
+        suggestion_agent,
+        summary_agent,
+        model_id=model_id,
+        api_key=api_key,
+        base_url=base_url,
     )
     return AgentOS(
         id="work-reply-ai-agentos",

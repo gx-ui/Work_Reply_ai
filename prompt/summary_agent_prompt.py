@@ -25,7 +25,6 @@ SUMMARY_AGENT_INSTRUCTIONS = """
 - 当前处理状态：status + history 最新进展
 - 项目/客户背景：customer_name/project_name/mall_name
 - 售后知识参考：search_kefu_shouhou_knowledge 检索结果中的关键流程要点（若有）
-- 客服补充：custom_input 要点（若有）
 信息不足时用"待确认"，不猜测。
 
 ### reviews（注意事项罗列）

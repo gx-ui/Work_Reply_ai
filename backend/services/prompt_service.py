@@ -71,8 +71,6 @@ def build_agent_input(request: ChatRequest, works_tags: Optional[List[str]]) -> 
     project_attention_text  = redact_sensitive(_clip_text(attention.project_attention or "", 500))  or "（无）"
     supplier_attention_text = redact_sensitive(_clip_text(attention.supplier_attention or "", 500)) or "（无）"
 
-    custom_input_text = redact_sensitive(_clip_text(str(works.custom_input or "").strip(), 500)) or "（无）"
-
     history_lines = _format_history_items(list(works.history or []), max_items=5)
     history_text  = "\n".join([f"{i}. {redact_sensitive(line)}" for i, line in enumerate(history_lines, 1)]) if history_lines else "（无）"
 
@@ -87,7 +85,6 @@ def build_agent_input(request: ChatRequest, works_tags: Optional[List[str]]) -> 
         mall_name=mall_name_text,
         project_attention=project_attention_text,
         supplier_attention=supplier_attention_text,
-        custom_input=custom_input_text,
         history=history_text,
     )
     return final_prompt

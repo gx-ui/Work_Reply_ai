@@ -34,7 +34,7 @@ jobs:
             --disable-warnings \
             --cov=agent.summary_agent \
             --cov=agent.work_reply_agent \
-            --cov=agent.agent_initializer \
+            --cov=agent.work_reply_team \
             --cov=prompt.summary_agent_prompt \
             --cov=prompt.work_reply_agent_prompt \
             --cov-report=term-missing \

@@ -11,7 +11,6 @@ summary_rag_tools.py
 
 import json
 import logging
-import sys
 from typing import Dict, Union, List, Optional, Any
 
 from agno.tools import Toolkit
@@ -22,12 +21,6 @@ from utils.common import redact_sensitive
 
 
 logger = logging.getLogger("summary_rag_tools")
-logger.propagate = False
-if not logger.handlers:
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(logging.Formatter('%(asctime)s\n%(message)s\n' + '-' * 80))
-    logger.addHandler(handler)
-    logger.setLevel(logging.INFO)
 
 
 class SummaryRetrievalCore:

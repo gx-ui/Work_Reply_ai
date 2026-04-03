@@ -4,8 +4,11 @@
 """
 
 import json
+import logging
 from typing import Dict, Any, Optional
 from pathlib import Path
+
+logger = logging.getLogger("config_loader")
 
 class ConfigLoader:
     _instance: Optional['ConfigLoader'] = None
@@ -75,7 +78,7 @@ class ConfigLoader:
             with open(config_path, 'r', encoding='utf-8') as f:
                 config = json.load(f)
             
-            print(f"✅ 成功加载配置文件: {config_path}")
+            logger.info("成功加载配置文件: %s", config_path)
             return config
         
         except FileNotFoundError:
@@ -99,10 +102,30 @@ class ConfigLoader:
             "base_url": llm_config.get("base_url"),
             "api_key": llm_config.get("api_key"),
             "model_name": llm_config.get("model_name"),
+            "summary_model": llm_config.get("summary_model"),
             "temperature": llm_config.get("temperature", 0.1),
             "timeout": llm_config.get("timeout", 120),
             "max_retries": llm_config.get("max_retries", 3),
         }
+
+    def get_mysql_config(self) -> Optional[Dict[str, Any]]:
+        """
+        获取 MySQL 连接配置；未配置 host 时返回 None。
+        """
+        mysql = self.config.get("mysql") or {}
+        if not mysql.get("host"):
+            return None
+        return {
+            "host": mysql.get("host"),
+            "port": int(mysql.get("port", 3306)),
+            "user": mysql.get("user"),
+            "password": mysql.get("password"),
+            "database": mysql.get("database"),
+        }
+
+    def get_session_persistence_config(self) -> Dict[str, Any]:
+        """Agent 会话 MySQL 持久化相关配置。"""
+        return dict(self.config.get("session_persistence") or {})
     
     def get_embedding_config(self) -> Dict[str, Any]:
         """

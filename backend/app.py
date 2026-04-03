@@ -2,6 +2,7 @@
 Work reply AI Backend
 """
 from __future__ import annotations
+import json
 import logging
 import time
 import traceback
@@ -11,7 +12,7 @@ from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from backend.model.request_entity import ChatRequest
 from backend.model.response_entity import Suggestion, Summary
-from backend.services.agent_service import init_state, get_state, ensure_agentos_runtime, get_agentos_app, team_run, agent_run, get_knowledge_sources, reset_knowledge_sources
+from backend.services.agent_service import init_state, get_state, ensure_agents, ensure_agentos_runtime, get_agentos_app, team_run, agent_run, get_knowledge_sources, reset_knowledge_sources
 from backend.services.prompt_service import build_agent_input, build_summary_input
 from tools.rag_retrieval_tool import KnowledgeRetrievalTool
 from prompt.query_agent_prompt import QUERY_PROMPT_TEMPLATE
@@ -64,11 +65,14 @@ async def _handle_team_intent(chat_req: ChatRequest) -> Dict[str, Any]:
     ensure_agentos_runtime(allow_rag=True)
     state = get_state()
     works = chat_req.works_info
+    _tid = str(works.ticket_id or "").strip()
+    sid = (chat_req.session_id and str(chat_req.session_id).strip()) or (_tid or None)
     core = chat_req.core_info
     attention = chat_req.attention_info
     logger.info(
         f"📨 收到聊天请求\n"
         f"🎯 意图：{chat_req.intent}\n"
+        f"🎫 工单ID：{str(works.ticket_id or '').strip()}\n"
         f"📝 标题：{str(works.title or '').strip()}\n"
         f"📝 描述：{str(works.desc or '').strip()}\n"
         f"🏷️ 标签：{works.tags[:20]}\n"
@@ -86,7 +90,7 @@ async def _handle_team_intent(chat_req: ChatRequest) -> Dict[str, Any]:
         if state.agent_summary is None:
             raise HTTPException(status_code=500, detail="Summary Agent 初始化失败")
         summary_prompt = build_summary_input(chat_req)
-        raw = await agent_run(state.agent_summary, summary_prompt)
+        raw = await agent_run(state.agent_summary, summary_prompt, session_id=sid)
         summary_raw = parse_summary(raw)
         summary = Summary(
             info_summary=str(summary_raw.get("info_summary") or "").strip() or "待确认",
@@ -96,9 +100,9 @@ async def _handle_team_intent(chat_req: ChatRequest) -> Dict[str, Any]:
 
     # query 意图：直接全库语义检索，然后用 LLM 整理回答
     if chat_req.intent == "query":
-        user_query = str(chat_req.query or "").strip()
+        user_query = str(chat_req.query_info.query or "").strip()
         if not user_query:
-            raise HTTPException(status_code=400, detail="query 字段不能为空")
+            raise HTTPException(status_code=400, detail="query_info.query 不能为空")
 
         retrieval_tool = KnowledgeRetrievalTool(config_loader=state.config)
         raw_results = retrieval_tool.search(query=user_query, limit=5)
@@ -127,7 +131,7 @@ async def _handle_team_intent(chat_req: ChatRequest) -> Dict[str, Any]:
             user_query=user_query,
             search_results=search_text
         )
-        raw_answer = await agent_run(state.agent_plain, query_prompt)
+        raw_answer = await agent_run(state.agent_plain, query_prompt, session_id=sid)
         parsed = parse_query_answer(raw_answer)
         # 合并：LLM 解析出的 sources 与 Milvus 直接提取的 sources 取并集
         llm_sources = parsed.get("sources") or []
@@ -135,7 +139,20 @@ async def _handle_team_intent(chat_req: ChatRequest) -> Dict[str, Any]:
 
         return {"answer": parsed.get("answer", ""), "sources": all_sources}
 
-    # suggestion 意图：直接调用 work_reply_agent（优先 RAG），跳过 Team Router
+    # auto 意图：使用 Team Router 做真正的意图识别与分发
+    if chat_req.intent == "auto":
+        if state.team_router is None:
+            raise HTTPException(status_code=500, detail="Team Router 初始化失败")
+        team_prompt = json.dumps({
+            "intent": chat_req.intent,
+            "works_info": chat_req.works_info.model_dump() if chat_req.works_info else {},
+            "core_info": chat_req.core_info.model_dump() if chat_req.core_info else {},
+            "attention_info": chat_req.attention_info.model_dump() if chat_req.attention_info else {},
+            "query_info": chat_req.query_info.model_dump() if chat_req.query_info else {}, })
+        raw = await team_run(state.team_router, team_prompt, session_id=sid)
+        return {"auto_result": raw, "knowledge_sources": get_knowledge_sources()}
+
+    # suggestion 意图（兜底）
     suggestion_agent = (
         state.agent_rag
         if (state.rag_enabled and state.agent_rag is not None)
@@ -144,7 +161,7 @@ async def _handle_team_intent(chat_req: ChatRequest) -> Dict[str, Any]:
     if suggestion_agent is None:
         raise HTTPException(status_code=500, detail="Suggestion Agent 初始化失败")
     suggestion_prompt = build_agent_input(chat_req, works_tags=works.tags)
-    raw = await agent_run(suggestion_agent, suggestion_prompt)
+    raw = await agent_run(suggestion_agent, suggestion_prompt, session_id=sid)
     suggestion_content = parse_suggestion(raw)
     if not suggestion_content:
         suggestion_content = "知识库中暂未检索到相关信息，建议补充订单/问题细节后再核实处理。"
@@ -166,11 +183,14 @@ async def unified_chat(request: ChatRequest):
 @api_router.get("/health")
 async def health_check():
     state = get_state()
+    persist = state.config.get_session_persistence_config()
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
         "service": "Work reply AI Backend",
         "rag_enabled": bool(state.rag_enabled),
+        "session_mysql_enabled": bool(state.db_work is not None and state.db_summary is not None),
+        "session_persistence_config_enabled": bool(persist.get("enabled", True)),
     }
 
 @app.get("/")
