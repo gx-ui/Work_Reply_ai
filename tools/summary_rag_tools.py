@@ -16,8 +16,8 @@ from typing import Dict, Union, List, Optional, Any
 from agno.tools import Toolkit
 from config.config_loader import ConfigLoader
 from tools.milvus_tool import create_milvus_tools, MilvusSearchTool
-from utils.milvus_utils import clip_text
-from utils.common import redact_sensitive
+
+from utils.log_utils import record_tool_invocation
 
 
 logger = logging.getLogger("summary_rag_tools")
@@ -110,7 +110,7 @@ class SummaryRetrievalCore:
         for i, item in enumerate(result, 1):
             text = str(item.get("text", "") or "") if isinstance(item, dict) else str(item or "")
             file_name = str(item.get("file_name", "") or "") if isinstance(item, dict) else ""
-            safe_chunk = clip_text(redact_sensitive(text), 450)
+            safe_chunk = text
             source_label = f"[来源: {file_name}] " if file_name else ""
             lines.append(f"【{i}】{source_label}{safe_chunk}")
             lines.append("")
@@ -158,6 +158,7 @@ class KefuShouhouToolkit(Toolkit):
         Returns:
             str: 格式化结果，每条格式：【序号】[来源: file_name] 内容摘要
         """
+        record_tool_invocation("search_kefu_shouhou_knowledge")
         return self._core.search_as_string(query=query, limit=limit, file_name_filters=None)
 
 
@@ -199,6 +200,7 @@ class ZhuyishixiangToolkit(Toolkit):
         Returns:
             str: JSON 字符串 {{"unique_total_entities": N, "fields_name_list": [...]}}
         """
+        record_tool_invocation("list_zhuyishixiang_file_names")
         return self._core.list_chunks_metadata(include_content=False, file_name_filters=file_name_filters)
 
     def search_zhuyishixiang_knowledge(
@@ -228,6 +230,7 @@ class ZhuyishixiangToolkit(Toolkit):
         Returns:
             str: 格式化结果，每条格式：【序号】[来源: file_name] 内容摘要
         """
+        record_tool_invocation("search_zhuyishixiang_knowledge")
         return self._core.search_as_string(query=query, limit=limit, file_name_filters=file_name_filters)
 
 

@@ -4,6 +4,7 @@ import re
 import logging
 import contextvars
 import threading
+from collections import Counter
 from dataclasses import dataclass
 from typing import Optional, List, Dict, Any, Sequence, Union, Tuple, AsyncIterator
 from threading import RLock
@@ -15,8 +16,13 @@ from tools.summary_rag_tools import create_summary_rag_toolkits
 from agent.work_reply_agent import WorkReplyAgent
 from agent.summary_agent import SummaryAgent
 from db.mysql_store import init_mysql_engine_from_config
-from utils.milvus_utils import clip_text
-from utils.common import redact_sensitive
+
+
+from utils.log_utils import (
+    record_tool_invocation,
+    reset_tool_invocations,
+    get_tool_invocations,
+)
 logger = logging.getLogger("agent_service")
 
 # Agno 异步 arun 用 asyncio.to_thread 执行工具，会复制 ContextVar 到工作线程；
@@ -131,6 +137,57 @@ def extract_sources_from_agno_run_output(run_out: Any) -> List[str]:
     return merge_knowledge_source_names(names)
 
 
+def _extract_agent_available_tool_names(agent: Agent) -> List[str]:
+    names: List[str] = []
+    seen: set[str] = set()
+    for tool in getattr(agent, "tools", None) or []:
+        if callable(tool):
+            name = getattr(tool, "__name__", str(tool))
+            if name and name not in seen:
+                seen.add(name)
+                names.append(name)
+            continue
+        toolkit_name = str(getattr(tool, "name", "") or "").strip()
+        inner_tools = getattr(tool, "tools", None)
+        if isinstance(inner_tools, list) and inner_tools:
+            for fn in inner_tools:
+                fn_name = str(getattr(fn, "__name__", str(fn)) or "").strip()
+                display = f"{toolkit_name}.{fn_name}" if toolkit_name else fn_name
+                if display and display not in seen:
+                    seen.add(display)
+                    names.append(display)
+            continue
+        if toolkit_name and toolkit_name not in seen:
+            seen.add(toolkit_name)
+            names.append(toolkit_name)
+    return names
+
+
+def _build_tool_decision_audit(
+    agent: Agent,
+    called_tools: Sequence[str],
+) -> Dict[str, Any]:
+    available_tools = _extract_agent_available_tool_names(agent)
+    called_list = [str(x).strip() for x in called_tools if str(x).strip()]
+    called_counter = Counter(called_list)
+    called_names = list(called_counter.keys())
+    called_total = int(sum(called_counter.values()))
+    if not available_tools:
+        no_tool_reason = "no_tools_available"
+    elif called_total <= 0:
+        no_tool_reason = "model_direct_answer_or_prompt_judged_no_tool"
+    else:
+        no_tool_reason = "tools_called"
+    return {
+        "available_tools": available_tools,
+        "available_tool_count": len(available_tools),
+        "called_tools": called_names,
+        "called_tool_count": called_total,
+        "called_tool_histogram": dict(called_counter),
+        "no_tool_reason": no_tool_reason,
+    }
+
+
 # ────────────────────────────────────────────────────────────────
 # 带溯源能力的 RAG Toolkit 包装
 # ────────────────────────────────────────────────────────────────
@@ -141,6 +198,7 @@ class TracedKnowledgeRetrievalToolkit(KnowledgeRetrievalToolkit):
         limit: Optional[int] = 5,
         file_name_filters: Optional[Union[str, List[str]]] = None,
     ) -> str:
+        record_tool_invocation("search_knowledge_base")
         t0 = time.time()
         raw_result = self.retrieval_tool.search(
             query=query,
@@ -167,7 +225,7 @@ class TracedKnowledgeRetrievalToolkit(KnowledgeRetrievalToolkit):
             lines = [f"检索到 {len(raw_result)} 条结果：", ""]
             for i, chunk in enumerate(raw_result, 1):
                 content = chunk.get("content") or chunk.get("text") or ""
-                safe_chunk = clip_text(redact_sensitive(str(content)), 450)
+                safe_chunk = str(content)
                 fn_disp = (
                     chunk.get("file_name")
                     or chunk.get("filename")
@@ -184,7 +242,7 @@ class TracedKnowledgeRetrievalToolkit(KnowledgeRetrievalToolkit):
 
         logger.info(
             f"[知识库检索完成] search_knowledge_base\n"
-            f"查询：'{redact_sensitive(str(query or '')[:200])}'\n"
+            f"查询：'{str(query or '')}'\n"
             f"限制：{limit}\n"
             f"文件过滤：{file_name_filters}\n"
             f"返回条数：{len(file_names)}\n"
@@ -197,6 +255,7 @@ class TracedKnowledgeRetrievalToolkit(KnowledgeRetrievalToolkit):
         include_content: bool = False,
         file_name_filters: Any = None,
     ) -> str:
+        record_tool_invocation("list_knowledge_base_chunks_metadata")
         t0 = time.time()
         raw = super().list_knowledge_base_chunks_metadata(
             include_content=include_content,
@@ -206,22 +265,37 @@ class TracedKnowledgeRetrievalToolkit(KnowledgeRetrievalToolkit):
         summary = {}
         try:
             obj = json.loads(raw)
-            items = obj.get("items") if isinstance(obj, dict) else None
-            if isinstance(items, list):
+            if isinstance(obj, dict):
                 uniq = []
                 seen = set()
-                for it in items:
-                    if isinstance(it, dict) and it.get("file_name"):
-                        v = str(it.get("file_name")).strip()
-                        if not v or v in seen:
-                            continue
-                        seen.add(v)
-                        uniq.append(v)
-                summary = {
-                    "item_count": len(items),
-                    "unique_file_name_count": len(uniq),
-                    "unique_file_name_preview": uniq[:20],
-                }
+                items = obj.get("items")
+                if isinstance(items, list):
+                    for it in items:
+                        if isinstance(it, dict) and it.get("file_name"):
+                            v = str(it.get("file_name")).strip()
+                            if not v or v in seen:
+                                continue
+                            seen.add(v)
+                            uniq.append(v)
+                    summary = {
+                        "item_count": len(items),
+                        "unique_file_name_count": len(uniq),
+                        "unique_file_name_preview": uniq[:20],
+                    }
+                else:
+                    fields_name_list = obj.get("fields_name_list")
+                    if isinstance(fields_name_list, list):
+                        for it in fields_name_list:
+                            v = str(it or "").strip()
+                            if not v or v in seen:
+                                continue
+                            seen.add(v)
+                            uniq.append(v)
+                    summary = {
+                        "unique_total_entities": int(obj.get("unique_total_entities", len(uniq))),
+                        "unique_file_name_count": len(uniq),
+                        "unique_file_name_preview": uniq[:20],
+                    }
         except Exception:
             pass
 
@@ -346,16 +420,33 @@ async def agent_run(
     agent: Agent,
     prompt: str,
     session_id: Optional[str] = None,
-) -> Tuple[str, List[str]]:
+) -> Tuple[str, List[str], Dict[str, Any]]:
     """异步执行 Agent """
     reset_knowledge_sources()
+    reset_tool_invocations()
+    available_tools = _extract_agent_available_tool_names(agent)
     result = await agent.arun(prompt, session_id=session_id)
     text = str(result.content).strip()
     kb = merge_knowledge_source_names(
         get_knowledge_sources(),
         extract_sources_from_agno_run_output(result),
     )
-    return text, kb
+    called_tools = get_tool_invocations()
+    audit = _build_tool_decision_audit(agent, called_tools)
+    logger.info(
+        "[Agent工具决策审计]\n"
+        "可用工具数: %s\n"
+        "可用工具: %s\n"
+        "实际调用次数: %s\n"
+        "实际调用工具: %s\n"
+        "未调用原因标签: %s",
+        len(available_tools),
+        available_tools,
+        audit.get("called_tool_count"),
+        audit.get("called_tool_histogram"),
+        audit.get("no_tool_reason"),
+    )
+    return text, kb, audit
 
 
 async def agent_run_stream_collect(
@@ -371,6 +462,8 @@ async def agent_run_stream_collect(
     from agno.run.agent import RunErrorEvent, RunOutput, RunEvent
 
     reset_knowledge_sources()
+    reset_tool_invocations()
+    available_tools = _extract_agent_available_tool_names(agent)
     agen = agent.arun(
         prompt,
         session_id=session_id,
@@ -383,10 +476,25 @@ async def agent_run_stream_collect(
                 get_knowledge_sources(),
                 extract_sources_from_agno_run_output(item),
             )
+            audit = _build_tool_decision_audit(agent, get_tool_invocations())
+            logger.info(
+                "[Agent工具决策审计-流式]\n"
+                "可用工具数: %s\n"
+                "可用工具: %s\n"
+                "实际调用次数: %s\n"
+                "实际调用工具: %s\n"
+                "未调用原因标签: %s",
+                len(available_tools),
+                available_tools,
+                audit.get("called_tool_count"),
+                audit.get("called_tool_histogram"),
+                audit.get("no_tool_reason"),
+            )
             yield {
                 "kind": "complete",
                 "run_output": item,
                 "kb": kb,
+                "audit": audit,
             }
             return
         if isinstance(item, RunErrorEvent):

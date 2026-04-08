@@ -2,10 +2,9 @@ import json
 from typing import Dict, Union, List, Optional, Any
 from config.config_loader import ConfigLoader
 from tools.milvus_tool import create_milvus_tools, MilvusSearchTool
-from utils.milvus_utils import clip_text
+
 from agno.tools import Toolkit
 ContentDict = Dict[str, Union[str, Dict[str, str]]]
-from utils.common import redact_sensitive
 import logging
 
 """
@@ -108,7 +107,7 @@ class KnowledgeRetrievalTool:
         preview = [
             {
                 "file_name": str(it.get("file_name", "") or "")[:200],
-                "text_preview": clip_text(redact_sensitive(str(it.get("text", "") or "")), 160),
+                "text_preview": str(it.get("text", "") )
             }
             for it in items[:5]
         ]
@@ -145,7 +144,7 @@ class KnowledgeRetrievalTool:
         for i, item in enumerate(result, 1):
             text = str(item.get("text", "") or "") if isinstance(item, dict) else str(item or "")
             file_name = str(item.get("file_name", "") or "") if isinstance(item, dict) else ""
-            safe_chunk = clip_text(redact_sensitive(text), 450)
+            safe_chunk = text
             source_label = f"[来源: {file_name}] " if file_name else ""
             lines.append(f"【{i}】{source_label}{safe_chunk}")
             lines.append("")
