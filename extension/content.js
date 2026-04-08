@@ -89,6 +89,7 @@
   const DEBUG = localStorage.getItem('ai_debug') === 'true';
   const PANEL_KEY_ATTR = 'data-work-reply-panel-key';
   const PANEL_HOST_ATTR = 'data-work-reply-panel-host';
+  const PANEL_STATE_GRACE_MS = 20000;
   const panelRegistry = new Map();
   let panelHostSeq = 0;
 
@@ -159,6 +160,7 @@
   }
 
   function prunePanelRegistry(scopes) {
+    const now = Date.now();
     const activeHosts = new Set(
       (scopes || [])
         .filter((scope) => scope instanceof Element)
@@ -167,24 +169,60 @@
     for (const [panelKey, st] of panelRegistry.entries()) {
       const scope = st && st.scopeRoot;
       const hostId = st && st.hostId;
-      if (!scope || !(scope instanceof Element) || !scope.isConnected || !activeHosts.has(hostId)) {
+      if (scope instanceof Element && scope.isConnected && activeHosts.has(hostId)) {
+        st.lastSeenAt = now;
+        continue;
+      }
+      if (!st.lastSeenAt) {
+        st.lastSeenAt = now;
+      }
+      if (now - st.lastSeenAt >= PANEL_STATE_GRACE_MS) {
         panelRegistry.delete(panelKey);
       }
     }
   }
 
+  function findReusablePanelState(scopeRoot, panelKey, ticketIdentity, hostId) {
+    const ticketValue =
+      ticketIdentity && ticketIdentity.value ? String(ticketIdentity.value).trim() : '';
+    if (!ticketValue) return null;
+    for (const [existingKey, state] of panelRegistry.entries()) {
+      if (!state || existingKey === panelKey) continue;
+      const stateTicket = String(state.lastWorksheetTicketId || '').trim();
+      if (!stateTicket || stateTicket !== ticketValue) continue;
+      const existingScope = state.scopeRoot;
+      const scopeReusable =
+        !(existingScope instanceof Element) ||
+        !existingScope.isConnected ||
+        !isInteractiveWorksheetScope(existingScope);
+      if (!scopeReusable) continue;
+      panelRegistry.delete(existingKey);
+      state.panelKey = panelKey;
+      state.hostId = hostId;
+      state.scopeRoot = scopeRoot;
+      state.lastSeenAt = Date.now();
+      return state;
+    }
+    return null;
+  }
+
   /** 每个工单面板（.m-sheet-item 或独立 .m-sheet-reply 宿主）一份状态 */
   function panelState(scopeRoot) {
     const scope = scopeRoot instanceof Element ? scopeRoot : document.body;
+    const ticketIdentity = getCurrentWorksheetTicketIdentity(scope);
+    const hostId = getScopeHostId(scope);
     const panelKey = buildPanelKey(scope);
     if (scope && scope.setAttribute) {
       scope.setAttribute(PANEL_KEY_ATTR, panelKey);
     }
     let state = panelRegistry.get(panelKey);
     if (!state) {
+      state = findReusablePanelState(scope, panelKey, ticketIdentity, hostId);
+    }
+    if (!state) {
       state = {
         panelKey,
-        hostId: getScopeHostId(scope),
+        hostId,
         scopeRoot: scope,
         currentState: AI_STATES.IDLE,
         currentSuggestion: null,
@@ -212,11 +250,17 @@
         summaryStatus: 'idle',
         summaryError: '',
         lastUpdatedAt: 0,
+        lastSeenAt: Date.now(),
       };
+      if (ticketIdentity && ticketIdentity.value) {
+        state.lastWorksheetTicketId = String(ticketIdentity.value);
+        state.lastWorksheetTicketSource = ticketIdentity.source || '';
+      }
       panelRegistry.set(panelKey, state);
     }
     state.scopeRoot = scope;
-    state.hostId = getScopeHostId(scope);
+    state.hostId = hostId;
+    state.lastSeenAt = Date.now();
     return state;
   }
 
@@ -520,13 +564,61 @@
   function renderKbSourceNames(el, title, names) {
     if (!el) return;
     const arr = (names || []).map((x) => String(x || '').trim()).filter(Boolean);
+    const signature = arr.length ? `${title}::${arr.join('\n')}` : '';
+    if ((el.dataset.aiSourceSignature || '') === signature) {
+      return;
+    }
     if (arr.length === 0) {
-      el.innerHTML = '';
-      el.classList.remove('visible');
+      if (el.innerHTML) {
+        el.innerHTML = '';
+      }
+      if (el.classList.contains('visible')) {
+        el.classList.remove('visible');
+      }
+      el.dataset.aiSourceSignature = '';
       return;
     }
     el.innerHTML = `<strong>${escapeHtml(title)}</strong><br/>${arr.map((s) => `• ${escapeHtml(s)}`).join('<br/>')}`;
     el.classList.add('visible');
+    el.dataset.aiSourceSignature = signature;
+  }
+
+  function setInnerHtmlIfChanged(el, html) {
+    if (!el) return false;
+    const next = String(html || '');
+    if ((el.dataset.aiRenderHtml || '') === next) {
+      return false;
+    }
+    el.innerHTML = next;
+    el.dataset.aiRenderHtml = next;
+    el.dataset.aiRenderText = '';
+    return true;
+  }
+
+  function setTextIfChanged(el, text) {
+    if (!el) return false;
+    const next = String(text || '');
+    if ((el.dataset.aiRenderText || '') === next) {
+      return false;
+    }
+    el.textContent = next;
+    el.dataset.aiRenderText = next;
+    el.dataset.aiRenderHtml = '';
+    return true;
+  }
+
+  function setButtonState(button, text, disabled) {
+    if (!button) return;
+    const nextText = String(text || '');
+    const nextDisabled = Boolean(disabled);
+    if (button.disabled !== nextDisabled) {
+      button.disabled = nextDisabled;
+    }
+    if (button.innerHTML !== nextText) {
+      button.innerHTML = nextText;
+    }
+    button.dataset.aiRenderHtml = nextText;
+    button.dataset.aiRenderText = '';
   }
 
   /** 从 Model 正文中解析「[来源: 文件名]」与「[来源:文件名]」（与后端摘要 RAG 输出格式一致） */
@@ -877,20 +969,20 @@
       const box = getOrCreateSuggestionBox(scopeRoot);
       if (!box) return;
       const suggContent = box.querySelector('.ai-suggestion-content');
-      const suggActions = box.querySelector('.ai-suggestion-actions');
+      const generateBtn = box.querySelector('.ai-generate-btn');
+      const acceptBtn = box.querySelector('.ai-accept-btn');
       if (suggContent) {
-        suggContent.innerHTML = `
-        检测到工单内容更新，可点击“手动生成建议”获取最新建议
-      `;
+        setInnerHtmlIfChanged(
+          suggContent,
+          '<div class="ai-subtle-hint">检测到工单内容更新，可点击“重新生成”获取最新建议</div>'
+        );
       }
-      if (suggActions) {
-        suggActions.innerHTML = `
-        <button class="ai-manual-btn">手动生成建议</button>
-      `;
+      if (generateBtn) {
+        setTextIfChanged(generateBtn, '重新生成');
+        generateBtn.disabled = false;
       }
-      const manualBtn = box.querySelector('.ai-manual-btn');
-      if (manualBtn) {
-        manualBtn.addEventListener('click', () => handleManualGenerate(scopeRoot));
+      if (acceptBtn) {
+        acceptBtn.style.display = st.currentSuggestion ? 'inline-flex' : 'none';
       }
     }, 400);
   }
@@ -1320,7 +1412,6 @@
 
     const seen = new Set();
     const items = [];
-    const currentTicketId = new URLSearchParams(window.location.search).get('id'); // 获取当前工单ID
     
     const nodes = scopeRoot.querySelectorAll(selectors.join(','));
     nodes.forEach(node => {
@@ -2305,17 +2396,18 @@
     const queryBtn = box.querySelector('.ai-query-btn');
     const ragContainer = box.querySelector('.ai-rag-references');
     if (display) {
+      let displayHtml = '';
       if (st.queryStatus === 'loading') {
-        display.innerHTML = '<div class="ai-loading"><span class="ai-loading-spinner"></span>AI 正在查询中...</div>';
+        displayHtml = '<div class="ai-loading"><span class="ai-loading-spinner"></span>AI 正在查询中...</div>';
       } else if (st.lastQueryHtml) {
-        display.innerHTML = st.lastQueryHtml;
+        displayHtml = st.lastQueryHtml;
       } else {
-        display.innerHTML = getDefaultQueryDisplayHtml();
+        displayHtml = getDefaultQueryDisplayHtml();
       }
+      setInnerHtmlIfChanged(display, displayHtml);
     }
     if (queryBtn) {
-      queryBtn.disabled = st.queryStatus === 'loading';
-      queryBtn.textContent = st.queryStatus === 'loading' ? '查询中...' : '查询';
+      setButtonState(queryBtn, st.queryStatus === 'loading' ? '查询中...' : '查询', st.queryStatus === 'loading');
     }
     renderKbSourceNames(ragContainer, '检索来源：', st.lastQuerySources || []);
 
@@ -2323,29 +2415,28 @@
     const infoSummaryEl = box.querySelector('.ai-summary-info-summary');
     const reviewEl = box.querySelector('.ai-summary-review');
     if (summaryBtn) {
-      summaryBtn.disabled = st.summaryStatus === 'loading';
       if (st.summaryStatus === 'loading') {
-        summaryBtn.innerHTML = '<span class="ai-loading-spinner"></span>生成中...';
+        setButtonState(summaryBtn, '<span class="ai-loading-spinner"></span>生成中...', true);
       } else {
-        summaryBtn.textContent = '信息总结';
+        setButtonState(summaryBtn, '信息总结', false);
       }
     }
     if (infoSummaryEl) {
       if (st.summaryStatus === 'loading') {
-        infoSummaryEl.innerHTML = '<span class="ai-loading-spinner"></span>加载中...';
+        setInnerHtmlIfChanged(infoSummaryEl, '<span class="ai-loading-spinner"></span>加载中...');
       } else if (st.summaryError) {
-        infoSummaryEl.innerHTML = `<span style="color:#ff6b6b">${escapeHtml(st.summaryError)}</span>`;
+        setInnerHtmlIfChanged(infoSummaryEl, `<span style="color:#ff6b6b">${escapeHtml(st.summaryError)}</span>`);
       } else {
-        infoSummaryEl.innerHTML = st.lastSummaryInfoHtml || '--';
+        setInnerHtmlIfChanged(infoSummaryEl, st.lastSummaryInfoHtml || '--');
       }
     }
     if (reviewEl) {
       if (st.summaryStatus === 'loading') {
-        reviewEl.innerHTML = '<span class="ai-loading-spinner"></span>加载中...';
+        setInnerHtmlIfChanged(reviewEl, '<span class="ai-loading-spinner"></span>加载中...');
       } else if (st.summaryError) {
-        reviewEl.innerHTML = `<span style="color:#ff6b6b">${escapeHtml(st.summaryError)}</span>`;
+        setInnerHtmlIfChanged(reviewEl, `<span style="color:#ff6b6b">${escapeHtml(st.summaryError)}</span>`);
       } else {
-        reviewEl.innerHTML = st.lastSummaryReviewHtml || '--';
+        setInnerHtmlIfChanged(reviewEl, st.lastSummaryReviewHtml || '--');
       }
     }
     renderKbSourceNames(
@@ -2434,7 +2525,9 @@
       // Render Result
       const data = response;
       if (st.summaryRequestToken !== requestToken) {
-         recoverSummaryPaneAfterInterruptedRequest(scopeRoot, 'stale_response');
+         if (st.summaryRequestToken === null) {
+           recoverSummaryPaneAfterInterruptedRequest(scopeRoot, 'stale_response');
+         }
          return;
       }
       if (!isSameTicketContext(scopeRoot, requestTicketId)) {
@@ -2519,10 +2612,10 @@
           </div>
 
           <!-- 中栏 40%：查询任务区 -->
-          <div class="ai-center-column">
+            <div class="ai-center-column">
             <div class="ai-column-header">查询结果：</div>
             <div class="ai-suggestion-display">
-               <div class="ai-suggestion-text">可为您生成查询内容</div>
+               <div class="ai-suggestion-text">可输入查询内容...</div>
             </div>
             
             <div class="ai-input-label">输入框：</div>
@@ -2685,7 +2778,6 @@
     st.queryRequestToken = requestToken;
     st.queryStatus = 'loading';
     st.queryError = '';
-    st.lastQuerySources = [];
     syncAuxiliaryPanels(scopeRoot);
 
     try {
@@ -2739,7 +2831,9 @@
       });
 
       if (st.queryRequestToken !== requestToken) {
-        recoverQueryPaneAfterInterruptedRequest(scopeRoot, 'stale_response');
+        if (st.queryRequestToken === null) {
+          recoverQueryPaneAfterInterruptedRequest(scopeRoot, 'stale_response');
+        }
         return;
       }
       if (!isSameTicketContext(scopeRoot, requestTicketId)) {
@@ -2790,14 +2884,23 @@
     // Reset generate button
     const generateBtn = box.querySelector('.ai-generate-btn');
     const acceptBtn = box.querySelector('.ai-accept-btn');
+    const suggContent = box.querySelector('.ai-suggestion-content');
+    const summarysuggEl = box.querySelector('.ai-summary-suggestion');
     if (generateBtn) {
-        generateBtn.textContent = '生成建议';
+        setTextIfChanged(generateBtn, '生成建议');
         generateBtn.disabled = false;
     }
     if (acceptBtn) {
         acceptBtn.style.display = 'none';
         acceptBtn.disabled = false;
     }
+    if (suggContent) {
+      setInnerHtmlIfChanged(suggContent, '');
+    }
+    if (summarysuggEl) {
+      setTextIfChanged(summarysuggEl, '--');
+    }
+    renderKbSourceNames(box.querySelector('.ai-suggestion-kb-sources'), '检索来源：', []);
     syncAuxiliaryPanels(scopeRoot);
   }
 
@@ -2805,7 +2908,7 @@
     const box = getOrCreateSuggestionBox(scopeRoot);
     if (!box) return;
     const summarysuggEl = box.querySelector('.ai-summary-suggestion');
-    if (summarysuggEl) summarysuggEl.textContent = '检测到客服已回复。点击“生成建议”可获取 AI 建议。';
+    if (summarysuggEl) setTextIfChanged(summarysuggEl, '检测到客服已回复。点击“生成建议”可获取 AI 建议。');
     syncAuxiliaryPanels(scopeRoot);
   }
 
@@ -2813,11 +2916,16 @@
     const box = getOrCreateSuggestionBox(scopeRoot);
     if (!box) return;
     const summarysuggEl = box.querySelector('.ai-summary-suggestion');
-    if (summarysuggEl) summarysuggEl.innerHTML = `<div class="ai-loading" style="color:#1f2a3d;"><span class="ai-loading-spinner" style="border-color:rgba(31,42,61,0.25);border-top-color:#1f2a3d;"></span>${escapeHtml(options.message || 'AI 正在思考中...')}</div>`;
+    if (summarysuggEl) {
+      setInnerHtmlIfChanged(
+        summarysuggEl,
+        `<div class="ai-loading" style="color:#1f2a3d;"><span class="ai-loading-spinner" style="border-color:rgba(31,42,61,0.25);border-top-color:#1f2a3d;"></span>${escapeHtml(options.message || 'AI 正在思考中...')}</div>`
+      );
+    }
     const generateBtn = box.querySelector('.ai-generate-btn');
     const acceptBtn = box.querySelector('.ai-accept-btn');
     if (generateBtn) {
-        generateBtn.textContent = '生成中...';
+        setTextIfChanged(generateBtn, '生成中...');
         generateBtn.disabled = true;
     }
     if (acceptBtn) {
@@ -2841,7 +2949,7 @@
 
     // 建议结果展示在右侧「工单回复建议」区域
     const summarysuggEl = box.querySelector('.ai-summary-suggestion');
-    if (summarysuggEl) summarysuggEl.textContent = suggestionText || '--';
+    if (summarysuggEl) setTextIfChanged(summarysuggEl, suggestionText || '--');
 
     let knowledgeSources = [];
     const fromApi = options.knowledgeSources;
@@ -2864,13 +2972,20 @@
 
     const generateBtn = box.querySelector('.ai-generate-btn');
     const acceptBtn = box.querySelector('.ai-accept-btn');
+    const suggContent = box.querySelector('.ai-suggestion-content');
     if (generateBtn) {
-        generateBtn.textContent = '重新生成';
+        setTextIfChanged(generateBtn, '重新生成');
         generateBtn.disabled = false;
     }
     if (acceptBtn) {
         acceptBtn.style.display = 'inline-flex';
         acceptBtn.disabled = false;
+    }
+    if (suggContent) {
+      const hintHtml = options.hint
+        ? `<div class="ai-subtle-hint">${escapeHtml(options.hint)}</div>`
+        : '';
+      setInnerHtmlIfChanged(suggContent, hintHtml);
     }
     syncAuxiliaryPanels(scopeRoot);
   }
@@ -2880,12 +2995,14 @@
     if (!box) return;
     const summarysuggEl = box.querySelector('.ai-summary-suggestion');
     const message = options.errorMessage || '暂无信息，请稍后重试';
-    if (summarysuggEl) summarysuggEl.innerHTML = `<span style="color:#ff6b6b">⚠️ ${escapeHtml(message)}</span>`;
+    if (summarysuggEl) {
+      setInnerHtmlIfChanged(summarysuggEl, `<span style="color:#ff6b6b">⚠️ ${escapeHtml(message)}</span>`);
+    }
     
     const generateBtn = box.querySelector('.ai-generate-btn');
     const acceptBtn = box.querySelector('.ai-accept-btn');
     if (generateBtn) {
-        generateBtn.textContent = '重试';
+        setTextIfChanged(generateBtn, '重试');
         generateBtn.disabled = false;
     }
     if (acceptBtn) {
@@ -3277,17 +3394,16 @@
       font-weight: 400;
     }
 
-    .ai-manual-btn {
-      font-size: 13px;
-      font-weight: 600;
-      padding: 6px 12px;
-      border-radius: 6px;
-      border: none;
-      cursor: pointer;
-      background: white;
-      color: #764ba2;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    .ai-subtle-hint {
+      font-size: 12px;
+      line-height: 1.5;
+      color: rgba(255,255,255,0.86);
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 8px;
+      padding: 6px 8px;
     }
+
     .ai-btn:disabled {
       opacity: 0.6;
       cursor: not-allowed;
