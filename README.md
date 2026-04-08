@@ -1,310 +1,199 @@
 # 工单回复 AI 助手（Work Reply AI）
 
-基于 RAG（检索增强生成）技术的智能工单回复建议系统，为客服人员提供 AI 生成的回复建议。
+基于 **Agno Agent** 与 **Milvus 向量检索（RAG）** 的智能工单助手：为客服提供**回复建议**、**工单摘要**、**知识库问答**等能力，并提供 **SSE 流式**接口。
 
 ## 项目特性
 
-- 🤖 **AI 智能回复**：基于通义千问（Qwen）大语言模型生成客服回复建议
-- 📚 **RAG 知识库**：基于 Milvus 向量数据库，提供知识库检索增强
-- 🔍 **语义搜索**：支持语义相似度检索，精准匹配相关知识
-- 🔄 **父子文档召回**：支持 Parent-Child 文档结构，提升检索完整性
-- 🎯 **敏感信息脱敏**：自动脱敏手机号、订单号、密码等敏感信息
-- � **美观日志**：带颜色和表情符号的友好日志输出
+- **多意图统一入口**：`suggestion`（回复建议）、`summary`（工单摘要）、`query`（知识查询）
+- **RAG 知识库**：主知识库 + 摘要专用双库（客服售后案例、项目注意事项），Milvus 语义检索
+- **父子文档召回**：Parent–Child 结构下可提升召回完整性（见 `utils/parent_child_retrieval.py`）
+- **Chrome 扩展**：`extension/` 侧对接后端（网关路径与本文 API 一致）
+- **可选持久化**：按配置将单次会话结果写入 MySQL（`chat_run_persistence`）
+- **可观测日志**：请求追踪、工具调用记录等（见 `utils/log_utils.py`）
 
-## 目录结构
+## 环境要求
+
+- **Python**：建议 **3.10+**（3.12 亦可，以本机验证环境为准）
+- **Milvus**：可访问的集群或托管实例
+- **大模型与向量**：兼容 OpenAI 协议的 **Chat** 与 **Embedding** 端点（如 DashScope 兼容模式）
+
+## 目录结构（与仓库一致）
 
 ```
 work_reply_ai/
-├── app/                        # FastAPI 应用入口
-│   └── app.py                  # ASGI：FastAPI app 实例
-├── entity/                     # Pydantic 请求/响应实体
+├── app/                      # FastAPI 入口
+│   └── app.py                # 路由：/cs_assist_ai/chat、/chat/stream、health 等
+├── agent/                    # Agno Agent 封装
+│   ├── work_reply_agent.py   # 回复建议 / 通用工单 Agent
+│   └── summary_agent.py      # 摘要 Agent
+├── entity/                   # Pydantic 请求/响应模型
 │   ├── request.py
 │   └── response.py
-├── services/                   # 业务服务层
-│   ├── agent_service.py        # Agent 服务管理
-│   └── prompt_service.py       # Prompt 构建服务
-├── config/                    # 配置模块
-│   ├── config.json            # 配置文件（LLM、Milvus、Embedding等）
-│   └── config_loader.py       # 配置加载器
-├── tools/                     # 工具模块
-│   ├── milvus_tool.py        # Milvus 向量检索工具
-│   └── rag_retrieval_tool.py # RAG 检索工具封装
-├── agent/                     # Agent 模块
-│   └── work_reply_agent.py    # 工单回复 Agent
-├── prompt/                    # Prompt 模板
-│   └── agent_prompt.py       # Agent 提示词模板
-├── utils/                    # 工具函数
-│   ├── common.py             # 通用工具
-│   ├── milvus_utils.py       # Milvus 辅助工具
-│   └── parent_child_retrieval.py # 父子文档召回
-├── extension/                  # Chrome 扩展（预留）
-└── README.md                   # 本文件
+├── services/
+│   └── agent_service.py      # Agent 初始化、运行、溯源辅助
+├── db/                       # MySQL 引擎与 chat 快照持久化
+│   ├── mysql_store.py
+│   └── chat_run_store.py
+├── config/
+│   ├── config.json           # 默认配置（勿提交真实密钥）
+│   ├── config_dev.json       # 测试/开发配置（可选）
+│   └── config_loader.py
+├── tools/
+│   ├── milvus_tool.py        # Milvus + Embedding 检索
+│   ├── rag_retrieval_tool.py # 主知识库 RAG Toolkit
+│   └── summary_rag_tools.py  # 摘要链路专用 RAG Toolkit
+├── prompt/
+│   ├── work_reply_agent_prompt.py
+│   ├── summary_agent_prompt.py
+│   └── query_agent_prompt.py
+├── utils/
+│   ├── log_utils.py
+│   ├── milvus_utils.py
+│   ├── parent_child_retrieval.py
+│   └── common.py             # 通用工具（如脱敏等）
+├── scripts/                  # 运维/辅助脚本
+├── extension/                # 浏览器扩展前端
+├── knowledges/               # 本地试验/知识相关脚本（可选）
+├── requirements.txt
+└── README.md
 ```
 
 ## 技术栈
 
-### 后端
-- **FastAPI** - 现代 Python Web 框架
-- **Agno** - Agent 框架（基于 DashScope/通义千问）
-- **Milvus** - 向量数据库
-- **DashScope** - 阿里云通义千问 API
-- **OpenAI SDK** - Embedding 向量化
-
-### 核心依赖
-```
-fastapi
-uvicorn
-pydantic
-agno
-pymilvus
-openai
-dashscope
-```
+| 层级 | 技术 |
+|------|------|
+| Web | FastAPI、Uvicorn |
+| Agent | Agno、`agno.models.dashscope.DashScope`（通义千问兼容 OpenAI 协议） |
+| 向量库 | pymilvus |
+| 向量化 | OpenAI 兼容 `embeddings.create`（见 `tools/milvus_tool.py`） |
+| ORM | SQLAlchemy 2.x + PyMySQL（可选） |
 
 ## 快速开始
 
 ### 1. 安装依赖
 
 ```bash
-pip install fastapi uvicorn pydantic agno pymilvus openai dashscope
+cd work_reply_ai
+pip install -r requirements.txt
 ```
 
-### 2. 配置说明
+### 2. 配置
 
-编辑 `config/config.json` 文件：
+1. 复制并编辑 `config/config.json`（或单独维护一份 **不入库** 的配置文件）。
+2. 通过环境变量指定配置文件（**推荐生产**）：
 
-```json
-{
-    "llm": {
-        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1/",
-        "api_key": "your-api-key",
-        "model_name": "qwen3-max",
-        "temperature": 0.1,
-        "timeout": 120
-    },
-    "milvus": {
-        "host": "your-milvus-host",
-        "port": 19530,
-        "db_name": "rag",
-        "collection_name": "your-collection-name",
-        "dim": 2048,
-        "limit": 5
-    },
-    "embedding": {
-        "model_name": "text-embedding-v4",
-        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-        "api_key": "your-api-key"
-    }
-}
-```
+| 变量 | 说明 |
+|------|------|
+| `WORK_REPLY_CONFIG_FILE` | 配置文件路径（相对项目根或绝对路径） |
+| `WORK_REPLY_PROFILE` | `dev` → `config/config.json`；`test` → `config/config_dev.json` |
 
-**配置项说明：**
+**配置要点**（键名以 `config_loader` 实际读取为准）：
 
-| 配置项 | 说明 |
-|--------|------|
-| `llm.base_url` | LLM API 基础地址 |
-| `llm.api_key` | DashScope API 密钥 |
-| `llm.model_name` | 使用的 LLM 模型（默认 qwen3-max） |
-| `milvus.host` | Milvus 服务器地址 |
-| `milvus.port` | Milvus 端口（默认 19530） |
-| `milvus.collection_name` | 知识库 Collection 名称 |
-| `embedding.model_name` | Embedding 模型名称 |
+- **`llm`**：`base_url`、`api_key`、`model_name`、超时与重试等。
+- **`embedding`**：与检索共用的向量化服务；**摘要/主 RAG 查 Milvus 前都会请求 embedding**，网络或超时会导致 `APITimeoutError`。
+- **`milvus`**：主知识库集合。
+- **`milvus_kefu_shouhou` / `milvus_zhuyishixiang`**：摘要链路专用集合（若缺失则对应 Toolkit 初始化会跳过）。
+- **`mysql` + `chat_run_persistence`**：可选；启用后写入工单快照表。
+
+**安全**：请勿将真实 `api_key`、数据库密码提交到公开仓库；已泄露的密钥应及时轮换。
 
 ### 3. 启动服务
 
 ```bash
-cd work_reply_ai
-
 uvicorn app.app:app --reload --host 0.0.0.0 --port 8003
 ```
 
-### 4. 调用 API
+根路径说明：`GET /` 会列出主要 endpoint。业务 API 挂载在 **`/cs_assist_ai`** 下。
 
-**请求示例：**
+### 4. 健康检查
 
 ```bash
-curl -X POST "http://localhost:8003/cs_assist_ai/chat" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "intent": "suggestion",
-    "session_id": "182192792",
-    "query_info": {
-      "query": "请生成回复建议"
-    },
-    "works_info": {
-      "ticket_id": "182192792",
-      "title": "南网异常件3.10（超时未签收）",
-      "desc": "用户反馈超时未签收，要求尽快处理",
-      "history": [
-        {"index": 1, "summary": "今天 17:08回复了工单：已发短信提醒客户及时取件。"}
-      ],
-      "priority": "高",
-      "status": "处理中"
-    },
-    "core_info": {
-      "customer_name": "张三",
-      "project_name": "南网",
-      "mall_name": "官方商城"
-    },
-    "attention_info": {
-      "project_attention": "",
-      "supplier_attention": ""
-    }
-  }'
+curl -s http://localhost:8003/cs_assist_ai/health
 ```
 
-**响应示例：**
+## API 说明
 
-```json
-{
-  "suggestion": "已发短信提醒客户及时取件，后续将跟进物流妥投状态并闭环处理。",
-  "knowledge_sources": ["内-南网售后处理.md"]
-}
-```
+### 统一聊天（JSON）
 
-## API 接口
-
-### 1. 统一聊天接口
-
-```
+```http
 POST /cs_assist_ai/chat
+Content-Type: application/json
 ```
 
-**请求体：**
+**请求体**（`ChatRequest`，字段名与 `entity/request.py` 一致）：
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| intent | string | suggestion / summary / query |
-| session_id | string | 可选，与会话绑定； |
-| query_info | object | `query`：与意图相关的询问/补充文本 |
-| works_info | object | 工单信息（含 `ticket_id`、title、desc 等） |
-| core_info | object | 核心项目信息 |
-| attention_info | object | 注意事项 |
+| 字段 | 说明 |
+|------|------|
+| `intent` | `suggestion` \| `summary` \| `query` |
+| `session_id` | 可选，用于会话与追踪 |
+| `works_info` | 工单：标题、描述、状态、历史等 |
+| `core_info` | 客户/项目/商城等 |
+| `attention_info` | 项目/供应商注意事项 |
+| `query_info` | **`query` 意图必填**：`query_info.query` 为用户问题 |
 
-**响应：**
+**响应**（随 `intent` 变化；`suggestion` / `query` 使用 `by_alias=True`，见 `app/app.py`）：
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| suggestion | string | AI 生成的回复建议 |
-| knowledge_sources | string[] | 使用的知识库文件 |
+- **`suggestion`**：`{"suggestion": "...", "knowledge_sources": [...]}`
+- **`summary`**：`{"summary": {"info_summary": "...", "reviews": "...", "summary_sources": [...]}}`
+- **`query`**：`{"answer": "...", "sources": [...]}`
 
-### 2. 健康检查
+### 流式（SSE）
 
-```
-GET /cs_assist_ai/health
-```
-
-### 3. 根路径
-
-```
-GET /
+```http
+POST /cs_assist_ai/chat/stream
 ```
 
-## 核心功能
+事件流中会包含 `delta`/`tool` 等，结束时 `event=done` 携带与同步接口等价的业务 JSON。
 
-### 1. RAG 检索流程
+### 兼容路径（旧网关）
 
-系统采用**两阶段检索**策略：
+- `POST /cs_assist_ai/work_reply_ai/chat`
+- `POST /cs_assist_ai/work_reply_ai/chat/stream`
 
-1. **Step 1（探路）**：调用 `list_knowledge_base_chunks_metadata` 获取知识库文件列表
-2. **Step 2（决策）**：结合工单信息筛选最相关的 2-5 个文件名
-3. **Step 3（检索）**：调用 `search_knowledge_base` 进行精准语义检索
-4. **Step 4（兜底）**：若筛选失败，则进行全量语义检索
+## 调用示例
 
-### 2. 父子文档召回
+### 回复建议（suggestion）
 
-支持 Milvus Parent-Child 文档结构：
-- 当检索到 child 文档时，自动查找并替换为 parent 文档内容
-- 避免检索结果碎片化，提升答案完整性
-
-### 3. 敏感信息脱敏
-
-自动脱敏以下信息：
-- 手机号（11位数字）
-- 订单号/编号（15-20位数字）
-- 密码、账号等敏感词
-
-### 4. Agent 输出规范
-
-- 仅输出 JSON 格式：`{"suggestion": "..."}`
-- suggestion 长度为 5-70 字中文
-- 语气真诚、简明、可执行
-
-## 日志系统
-
-系统采用美观的日志输出格式：
-
-```
-📨 收到请求
-📝 工单标题：南网异常件3.10（超时未签收）
-🏷️ 标签：['公司级核心项目']
-📜 历史记录：[{"index": 1, "summary": "今天 17:08回复了工单..."}]...
---------------------------------------------------------------------------------
+```bash
+curl -X POST "http://localhost:8003/cs_assist_ai/chat" ^
+  -H "Content-Type: application/json" ^
+  -d "{\"intent\":\"suggestion\",\"session_id\":\"demo-1\",\"works_info\":{\"ticket_id\":\"T1\",\"title\":\"少发\",\"desc\":\"用户称少发一件\",\"history\":[],\"status\":\"处理中\",\"priority\":\"P1\"},\"core_info\":{\"customer_name\":\"示例客户\",\"project_name\":\"示例项目\",\"mall_name\":\"示例商城\"},\"attention_info\":{\"project_attention\":\"\",\"supplier_attention\":\"\"}}"
 ```
 
-日志特点：
-- ✅ INFO - 绿色标识成功操作
-- ⚠️ WARNING - 黄色标识警告信息
-- ❌ ERROR - 红色标识错误信息
-- 支持 Emoji 图标和颜色高亮
+### 工单摘要（summary）
 
-## 项目流程图
+将上例中 `"intent"` 改为 `"summary"` 即可（字段结构相同；模型将按摘要提示词与 RAG 工具生成结构化 JSON）。
 
-```
-┌─────────────┐
-│  用户请求   │
-│ (工单信息)  │
-└──────┬──────┘
-       │
-       ▼
-┌─────────────────────────────┐
-│  FastAPI 后端               │
-│  /cs_assist_ai/chat         │
-└──────┬──────────────────────┘
-       │
-       ▼
-┌─────────────────────────────┐
-│  Prompt 构建                │
-│  (工单+标签+历史)            │
-└──────┬──────────────────────┘
-       │
-       ▼
-┌─────────────────────────────┐
-│  Agno Agent (RAG模式)       │
-│  ┌────────────────────────┐ │
-│  │ 知识库检索 Toolkit     │ │
-│  │ - list_chunks_metadata│ │
-│  │ - search_knowledge    │ │
-│  └───────────┬────────────┘ │
-│              │              │
-│              ▼              │
-│  ┌────────────────────────┐ │
-│  │ Milvus 向量检索        │ │
-│  │ - 语义搜索             │ │
-│  │ - 父子文档召回         │ │
-│  └────────────────────────┘ │
-└──────┬──────────────────────┘
-       │
-       ▼
-┌─────────────────────────────┐
-│  LLM 生成回复建议          │
-│  (通义千问 qwen3-max)      │
-└──────┬──────────────────────┘
-       │
-       ▼
-┌─────────────────────────────┐
-│  敏感信息脱敏               │
-│  返回 JSON 响应              │
-└─────────────────────────────┘
+### 知识查询（query）
+
+```bash
+curl -X POST "http://localhost:8003/cs_assist_ai/chat" ^
+  -H "Content-Type: application/json" ^
+  -d "{\"intent\":\"query\",\"query_info\":{\"query\":\"少发如何补发？\"},\"works_info\":{...},\"core_info\":{...},\"attention_info\":{...}}"
 ```
 
-## 注意事项
+## RAG 与检索流程（概要）
 
-1. **API Key 安全**：请勿将真实 API Key 提交到代码仓库
-2. **Milvus 连接**：确保 Milvus 服务正常运行
-3. **知识库配置**：collection_name 需要与实际 Milvus 中的 Collection 名称一致
-4. **端口占用**：默认端口 8003，如需修改请更新启动命令
+- **主链路（suggestion / query）**：`KnowledgeRetrievalToolkit` — 可先列举 chunk 元数据再按 `file_name` 过滤语义检索，失败可走全库检索（详见 `tools/rag_retrieval_tool.py`）。
+- **摘要链路（summary）**：`create_summary_rag_toolkits` — 客服售后库 + 注意事项库两套路由（见 `tools/summary_rag_tools.py`）。
+
+## 辅助脚本
+
+| 脚本 | 说明 |
+|------|------|
+| `scripts/init_chat_run_table.py` | 初始化 chat 快照表（需 MySQL 配置） |
+| `scripts/cache_file_name.py` | 文件名缓存相关 |
+| `scripts/test_parent_child_retrieval.py` | 父子召回测试 |
+
+## 常见问题
+
+1. **`openai.APITimeoutError`（Embedding 超时）**  
+   向量检索前会对查询调用 `embeddings.create`。**Embedding 的 `base_url` / 网络 / 限流**异常时会出现超时，与 Milvus 本身无关。
+2. **RAG 未生效**  
+   检查 Milvus 与 embedding 配置；主 Agent 初始化失败时会降级为无工具模式（见日志）。
+3. **端口**  
+   默认 `8003`，与扩展或网关配置保持一致即可。
 
 ## 许可证
 
-[根据项目实际情况填写]
+按项目组要求自行补充（如内部专有、MIT 等）。

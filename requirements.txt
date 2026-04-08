@@ -1,23 +1,26 @@
-# Work Reply AI 依赖列表
-# Web 框架
+# Work Reply AI — Python 依赖
+# 建议使用 Python 3.10+（与当前开发与 pydantic v2 / sqlalchemy 2 兼容）
+
+# ---------- Web ----------
 fastapi>=0.100.0
 uvicorn[standard]>=0.23.0
 
-# 数据模型
+# ---------- 数据模型 ----------
 pydantic>=2.0.0
 
-# Agent 框架
+# ---------- Agent / LLM ----------
+# Agno 运行时；DashScope 模型一般由 agno 集成，此处显式保留便于环境一致与排障
 agno>=1.0.0
-
-# 向量数据库
-pymilvus>=2.3.0
-
-# OpenAI 兼容客户端（用于 Embedding）
-openai>=1.0.0
-
-# DashScope（阿里云通义千问）
 dashscope>=1.10.0
 
-# MySQL
+# ---------- 向量检索 ----------
+pymilvus>=2.3.0
+
+# ---------- Embedding / OpenAI 兼容 HTTP 客户端 ----------
+# Milvus 检索前需对 query 做 embedding；openai 包通常依赖 httpx
+openai>=1.0.0
+httpx>=0.27.0
+
+# ---------- 持久化（可选，按 config 启用） ----------
 pymysql>=1.1.0
 sqlalchemy>=2.0.0
