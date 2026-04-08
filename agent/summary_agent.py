@@ -40,6 +40,7 @@ class SummaryAgent:
             tools=list(tools or []),
             instructions=SUMMARY_AGENT_INSTRUCTIONS,
             markdown=False,
+
             db=db,
         )
 

@@ -181,7 +181,7 @@ class ConfigLoader:
             "db_name": milvus_config.get("db_name", "default"),
             "collection_name": milvus_config.get("collection_name"),
             "dim": milvus_config.get("dim", 2048),
-            "limit": milvus_config.get("limit", 5),
+            "limit": milvus_config.get("limit", 10),
             "search_params": milvus_config.get("search_params", {}),
         }
 
@@ -205,7 +205,7 @@ class ConfigLoader:
             "db_name":         extra.get("db_name")         or base.get("db_name", "default"),
             "collection_name": extra.get("collection_name") or "",
             "dim":             extra.get("dim")             or base.get("dim", 2048),
-            "limit":           extra.get("limit")           or base.get("limit", 5),
+            "limit":           extra.get("limit")           or base.get("limit", 10),
             "search_params":   extra.get("search_params")   or base.get("search_params", {}),
             "output_field":    extra.get("output_field")    or base.get("output_field", "content"),
         }

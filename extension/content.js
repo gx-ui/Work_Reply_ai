@@ -8,36 +8,19 @@
   window.__csAssistAiInitialized = true;
 
   // ========== 核心配置 ==========
-  // API地址：默认走本地，便于调试；可通过 localStorage 随时切回网关
-  // 在浏览器 F12 使用以下命令
-  // localStorage.setItem('ai_api_mode', 'local'); // local | remote
-  // localStorage.setItem('ai_api_base', 'http://localhost:8003'); // 可直接覆盖完整 base
-  // localStorage.setItem('ai_server_api_base', 'https://你的网关/前缀'); // 配置远程网关
-  // location.reload();
-  // 后续删除已有配置：
-  // localStorage.removeItem('ai_api_mode');
-  // localStorage.removeItem('ai_api_base');
-  // localStorage.removeItem('ai_use_local_api');
+
+  // localStorage.removeItem('ai_api_base'); localStorage.removeItem('ai_api_mode');
   const CONFIG = {
     API_BASE: (() => {
       const DEFAULT_SERVER_URL = 'https://ai-gateway-show.yunzhonghe.com/cs_assist_ai';
-      // 本地开发默认地址（可通过 ai_local_api_base 覆盖）
-      const localUrl = localStorage.getItem('ai_local_api_base') || 'http://localhost:8003';
-      // 可选覆盖默认线上地址：localStorage.setItem('ai_server_api_base', 'https://你的网关/前缀')
+      // 与根 content.js 一致：未开本地开关时用固定本地地址变量（仅 forceLocal 为 true 时生效）
+      const localUrl = 'http://localhost:8003';
       const serverUrl = localStorage.getItem('ai_server_api_base') || DEFAULT_SERVER_URL;
-      // 显式覆盖（优先级最高）：localStorage.setItem('ai_api_base', 'http://localhost:8003')
-      const customBase = String(localStorage.getItem('ai_api_base') || '');
-      // 新模式开关（默认 local，便于本地调试）
-      const apiMode = String(localStorage.getItem('ai_api_mode') || 'local').toLowerCase();
 
       const forceLocal = localStorage.getItem('ai_use_local_api') === 'true';
       const forceServer = localStorage.getItem('ai_use_server_api') === 'true';
 
-      // 优先级：ai_api_base > 兼容强制开关 > ai_api_mode > 默认(local)
-      if (customBase) {
-        console.log('[AI助手] 使用自定义API:', customBase);
-        return customBase;
-      }
+      // 与根 content.js：强制本地 > 强制远端（一般与默认一致可省略）> 默认网关
       if (forceLocal) {
         console.log('[AI助手] 使用本地API:', localUrl);
         return localUrl;
@@ -46,12 +29,8 @@
         console.log('[AI助手] 强制使用服务器API:', serverUrl);
         return serverUrl;
       }
-      if (apiMode === 'remote' || apiMode === 'server') {
-        console.log('[AI助手] ai_api_mode=remote，使用服务器API:', serverUrl);
-        return serverUrl;
-      }
-      console.log('[AI助手] 默认使用本地API:', localUrl);
-      return localUrl;
+      console.log('[AI助手] 默认使用服务器API:', serverUrl);
+      return serverUrl;
     })(),
     INIT_SCAN_INTERVAL: 250, // 首屏快速探测
     INIT_SCAN_TIMEOUT: 15000, // 首屏探测最多15秒
@@ -1379,6 +1358,77 @@
     return '';
   }
 
+  // 按固定字段 id 读取输入/文本域的值（你提供的工单页面字段）
+  function pickValueByFieldId(root, fieldId) {
+    if (!fieldId) return '';
+    const selectors = [
+      `#${fieldId}`,
+      `input#${fieldId}`,
+      `textarea#${fieldId}`
+    ];
+    for (const selector of selectors) {
+      const el = (root && root.querySelector && root.querySelector(selector)) || document.querySelector(selector);
+      if (!el) continue;
+      const raw =
+        (typeof el.value === 'string' && el.value) ||
+        el.getAttribute('value') ||
+        el.getAttribute('title') ||
+        el.textContent ||
+        '';
+      const text = clipText(normalizeText(raw), 240);
+      if (text) return text;
+    }
+    return '';
+  }
+
+  // 从新版表单 DOM 中提取优先级（你提供的 priority-select 结构）
+  function pickPriorityFromDom(root) {
+    const scope = root || document;
+    const direct = scope.querySelector('.fishd-select.priority-select .fishd-select-option-single') ||
+      document.querySelector('.fishd-select.priority-select .fishd-select-option-single');
+    if (direct) {
+      const value = clipText(normalizeText(direct.textContent || ''), 80);
+      if (value) return value;
+    }
+    return '';
+  }
+
+  // 从新版表单 DOM 中提取工单状态（优先按状态标签行，其次按状态词兜底）
+  function pickStatusFromDom(root) {
+    const scopes = [root, document].filter((s, idx, arr) => s && arr.indexOf(s) === idx);
+    const statusWords = ['受理中', '处理中', '待处理', '待审核', '已完结', '已完成', '已关闭', '已驳回', '挂起', '回复中'];
+
+    for (const scope of scopes) {
+      // 1) 强匹配：按“状态”所在行读取同一行 value-show（与你提供 DOM 结构一致）
+      const rows = scope.querySelectorAll('.fishd-row.fishd-form-item, .fishd-form-item, .ant-form-item');
+      for (const row of rows) {
+        const labelEl = row.querySelector('.fishd-form-item-label, label[title], .ant-form-item-label');
+        const labelText = normalizeFieldKey(
+          (labelEl && (labelEl.getAttribute && labelEl.getAttribute('title'))) ||
+            (labelEl && (labelEl.innerText || labelEl.textContent)) ||
+            ''
+        );
+        if (!(labelText.includes('工单状态') || labelText === '状态' || labelText.includes('处理状态') || labelText.includes('当前状态'))) {
+          continue;
+        }
+        const valueEl = row.querySelector('.fishd-form-item-control .value-show, .fishd-form-item-control-wrapper .value-show, .value-show, input.fishd-input');
+        if (!valueEl) continue;
+        const raw = (typeof valueEl.value === 'string' && valueEl.value) || valueEl.textContent || '';
+        const value = clipText(normalizeText(raw), 80);
+        if (value) return value;
+      }
+
+      // 2) 兜底：扫描 value-show，按状态词命中
+      const candidates = scope.querySelectorAll('.fishd-form-item-control .value-show, .fishd-form-item-control-wrapper .value-show, .value-show');
+      for (const el of candidates) {
+        const value = clipText(normalizeText(el.textContent || ''), 80);
+        if (!value) continue;
+        if (statusWords.some(word => value.includes(word))) return value;
+      }
+    }
+    return '';
+  }
+
   function isVisibleForHistory(el) {
     if (!el || !el.isConnected) return false;
     const style = window.getComputedStyle(el);
@@ -1637,10 +1687,12 @@
       pickValueByLabelsFromRoot(mainRoot, ['子类目', '子分类', '二级分类', '三级分类']) ||
       pickValueFromText(mainText, ['子类目', '子分类', '二级分类', '三级分类']);
     const priority =
+      pickPriorityFromDom(root) ||
       pickFieldValue(fieldMap, ['优先级', '紧急程度', '严重程度', '优先等级']) ||
       pickValueByLabelsFromRoot(mainRoot, ['优先级', '紧急程度', '严重程度', '优先等级']) ||
       pickValueFromText(mainText, ['优先级', '紧急程度', '严重程度', '优先等级']);
     const status =
+      pickStatusFromDom(root) ||
       pickFieldValue(fieldMap, ['工单状态', '状态', '处理状态', '当前状态']) ||
       pickValueByLabelsFromRoot(mainRoot, ['工单状态', '状态', '处理状态', '当前状态']) ||
       pickValueFromText(mainText, ['工单状态', '状态', '处理状态', '当前状态']);
@@ -1649,23 +1701,27 @@
     const propertiesContainer = root.querySelector('.m-sheet-propertes');
     
     // Core Info Extraction - 优先从 .m-sheet-propertes 中直接查找
-    const customerName = 
+    const customerName =
+      pickValueByFieldId(root, 'field_5827173') ||
       (propertiesContainer && propertiesContainer.querySelector('label[title*="客户名称"]')?.closest('.fishd-row')?.querySelector('input.fishd-input')?.value) ||
       pickFieldValue(fieldMap, ['客户名称', '客户姓名', '客户']) || 
       pickValueByLabelsFromRoot(propertiesContainer || mainRoot, ['客户名称', '客户姓名', '客户']) || '';
       
-    const projectName = 
+    const projectName =
+      pickValueByFieldId(root, 'field_5827630') ||
       (propertiesContainer && propertiesContainer.querySelector('label[title*="项目名称"]')?.closest('.fishd-row')?.querySelector('input.fishd-input')?.value) ||
       pickFieldValue(fieldMap, ['项目名称', '所属项目', '项目']) || 
       pickValueByLabelsFromRoot(propertiesContainer || mainRoot, ['项目名称', '所属项目', '项目']) || '';
       
-    const mallName = 
+    const mallName =
+      pickValueByFieldId(root, 'field_5821564') ||
       (propertiesContainer && propertiesContainer.querySelector('label[title*="商城名称"]')?.closest('.fishd-row')?.querySelector('input.fishd-input')?.value) ||
       pickFieldValue(fieldMap, ['商城名称', '店铺名称', '来源商城']) || 
       pickValueByLabelsFromRoot(propertiesContainer || mainRoot, ['商城名称', '店铺名称', '来源商城']) || '';
 
     // Attention Info Extraction - 优先从 .m-sheet-propertes 中直接查找
-    const projectAttention = 
+    const projectAttention =
+      pickValueByFieldId(root, 'field_4678642') ||
       (propertiesContainer && propertiesContainer.querySelector('label[title*="项目注意事项"]')?.closest('.fishd-row')?.querySelector('textarea.ant-input')?.value) ||
       pickFieldValue(fieldMap, ['项目注意事项', '项目备注']) || 
       pickValueByLabelsFromRoot(propertiesContainer || mainRoot, ['项目注意事项', '项目备注']) || '';

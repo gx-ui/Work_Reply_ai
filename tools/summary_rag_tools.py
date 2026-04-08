@@ -153,7 +153,7 @@ class KefuShouhouToolkit(Toolkit):
         Args:
             query (str): 检索意图，建议 5-20 字，聚焦售后业务关键词。
                 示例："少发 补发 处理流程" / "7天无理由退货 退款流程" / "物流停滞 催件处理"
-            limit (Optional[int]): 返回数量，默认 5，建议 3-8。
+            limit (Optional[int]): 返回数量，默认 10，建议 8-15。
 
         Returns:
             str: 格式化结果，每条格式：【序号】[来源: file_name] 内容摘要
@@ -224,7 +224,7 @@ class ZhuyishixiangToolkit(Toolkit):
         Args:
             query (str): 检索意图，建议 5-20 字，聚焦规则/注意事项关键词。
                 示例："投诉工单 处理规范" / "补偿标准 特殊规则" / "供应商责任 判定标准"
-            limit (Optional[int]): 返回数量，默认 5，建议 3-8。
+            limit (Optional[int]): 返回数量，默认 10，建议 8-15。
             file_name_filters: 从 list_zhuyishixiang_file_names 筛选的文件名，强烈建议传入。
 
         Returns:

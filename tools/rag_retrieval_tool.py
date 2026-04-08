@@ -106,11 +106,11 @@ class KnowledgeRetrievalTool:
 
         preview = [
             {
-                "file_name": str(it.get("file_name", "") or "")[:200],
+                "file_name": str(it.get("file_name", "")),
                 "text_preview": str(it.get("text", "") )
             }
-            for it in items[:5]
-        ]
+            for it in items
+                    ]
         logger.info(
             "Milvus 检索完成\n策略: %s\n条数: %s\n预览: %s",
             strategy,
@@ -206,7 +206,7 @@ class KnowledgeRetrievalToolkit(Toolkit):
     def search_knowledge_base(
         self,
         query: str,
-        limit: Optional[int] = 5,
+        limit: Optional[int] = 10,
         file_name_filters: Optional[Union[str, List[str]]] = None,
     ) -> str:
         """
@@ -244,8 +244,8 @@ class KnowledgeRetrievalToolkit(Toolkit):
                   - desc="物流停滞超48小时" → query="物流异常 停滞 催件处理"
 
             limit (Optional[int]):
-                返回结果数量，默认 5，建议范围 3-10。
-                query 越具体可设小值（3-5），越泛可设大值（8-10）。
+                返回结果数量，默认 10，建议范围 8-15。
+                query 越具体可设小值（8），越泛可设大值（15）。
 
             file_name_filters (Optional[Union[str, List[str]]]):
                 文件名过滤条件，从 list_knowledge_base_chunks_metadata 返回的文件名中筛选。

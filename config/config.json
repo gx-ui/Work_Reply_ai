@@ -21,7 +21,7 @@
         "connection_alias": "default",
         "dim": 2048,
         "collection_name": "kefubuzhishiku1028ban_20251028155535",
-        "limit": 8,
+        "limit": 10,
         "search_params": {
             "metric_type": "COSINE",
             "params": {"nprobe": 10}
@@ -35,7 +35,7 @@
         "db_name": "rag",
         "dim": 2048,
         "collection_name": "kefushouhouanliku_20260313112927",
-        "limit": 8,
+        "limit": 10,
         "search_params": {
             "metric_type": "COSINE",
             "params": {"nprobe": 10}
@@ -49,7 +49,7 @@
         "db_name": "rag",
         "dim": 2048,
         "collection_name": "kefushouhouxiangmuzhuyishixiang_20260313112954",
-        "limit": 8,
+        "limit": 10,
         "search_params": {
             "metric_type": "COSINE",
             "params": {"nprobe": 10}
