@@ -3,7 +3,6 @@ import json
 import re
 import logging
 import contextvars
-import threading
 from collections import Counter
 from dataclasses import dataclass
 from typing import Optional, List, Dict, Any, Sequence, Union, Tuple, AsyncIterator
@@ -166,26 +165,108 @@ def _extract_agent_available_tool_names(agent: Agent) -> List[str]:
 def _build_tool_decision_audit(
     agent: Agent,
     called_tools: Sequence[str],
+    *,
+    available_tools: Optional[Sequence[str]] = None,
 ) -> Dict[str, Any]:
-    available_tools = _extract_agent_available_tool_names(agent)
+    available = list(available_tools) if available_tools is not None else _extract_agent_available_tool_names(agent)
     called_list = [str(x).strip() for x in called_tools if str(x).strip()]
     called_counter = Counter(called_list)
     called_names = list(called_counter.keys())
     called_total = int(sum(called_counter.values()))
-    if not available_tools:
+    if not available:
         no_tool_reason = "no_tools_available"
     elif called_total <= 0:
         no_tool_reason = "model_direct_answer_or_prompt_judged_no_tool"
     else:
         no_tool_reason = "tools_called"
     return {
-        "available_tools": available_tools,
-        "available_tool_count": len(available_tools),
+        "available_tools": available,
+        "available_tool_count": len(available),
         "called_tools": called_names,
         "called_tool_count": called_total,
         "called_tool_histogram": dict(called_counter),
         "no_tool_reason": no_tool_reason,
     }
+
+
+def _normalize_called_tool_name(raw_name: Any, available_tools: Sequence[str]) -> str:
+    name = str(raw_name or "").strip()
+    if not name:
+        return ""
+    if name in available_tools:
+        return name
+    suffix = f".{name}"
+    matches = [tool for tool in available_tools if tool.endswith(suffix)]
+    if len(matches) == 1:
+        return matches[0]
+    if matches:
+        return sorted(matches)[0]
+    return name
+
+
+def _extract_tool_name_candidates(tool_event: Any) -> List[str]:
+    candidates: List[str] = []
+    if tool_event is None:
+        return candidates
+    if isinstance(tool_event, dict):
+        for key in ("tool_name", "name", "function_name", "tool"):
+            value = tool_event.get(key)
+            if isinstance(value, dict):
+                nested = value.get("name")
+                if nested:
+                    candidates.append(str(nested))
+            elif value:
+                candidates.append(str(value))
+        return candidates
+
+    for attr in ("tool_name", "name", "function_name", "tool"):
+        value = getattr(tool_event, attr, None)
+        if isinstance(value, dict):
+            nested = value.get("name")
+            if nested:
+                candidates.append(str(nested))
+            continue
+        nested_name = getattr(value, "name", None) if value is not None else None
+        if nested_name:
+            candidates.append(str(nested_name))
+            continue
+        if value:
+            candidates.append(str(value))
+    return candidates
+
+
+def _extract_called_tool_names_from_run_output(
+    run_out: Any,
+    available_tools: Sequence[str],
+) -> List[str]:
+    called: List[str] = []
+    if run_out is None:
+        return called
+    for tool_event in getattr(run_out, "tools", None) or []:
+        for candidate in _extract_tool_name_candidates(tool_event):
+            normalized = _normalize_called_tool_name(candidate, available_tools)
+            if normalized:
+                called.append(normalized)
+                break
+    for member in getattr(run_out, "member_responses", None) or []:
+        called.extend(_extract_called_tool_names_from_run_output(member, available_tools))
+    return called
+
+
+def _merge_called_tools(
+    *,
+    available_tools: Sequence[str],
+    recorded_tools: Sequence[str],
+    run_out: Any = None,
+) -> List[str]:
+    merged: List[str] = []
+    for name in recorded_tools:
+        normalized = _normalize_called_tool_name(name, available_tools)
+        if normalized:
+            merged.append(normalized)
+    if run_out is not None:
+        merged.extend(_extract_called_tool_names_from_run_output(run_out, available_tools))
+    return merged
 
 
 # ────────────────────────────────────────────────────────────────
@@ -198,7 +279,7 @@ class TracedKnowledgeRetrievalToolkit(KnowledgeRetrievalToolkit):
         limit: Optional[int] = 5,
         file_name_filters: Optional[Union[str, List[str]]] = None,
     ) -> str:
-        record_tool_invocation("search_knowledge_base")
+        record_tool_invocation("knowledge_retrieval_toolkit.search_knowledge_base")
         t0 = time.time()
         raw_result = self.retrieval_tool.search(
             query=query,
@@ -255,7 +336,7 @@ class TracedKnowledgeRetrievalToolkit(KnowledgeRetrievalToolkit):
         include_content: bool = False,
         file_name_filters: Any = None,
     ) -> str:
-        record_tool_invocation("list_knowledge_base_chunks_metadata")
+        record_tool_invocation("knowledge_retrieval_toolkit.list_knowledge_base_chunks_metadata")
         t0 = time.time()
         raw = super().list_knowledge_base_chunks_metadata(
             include_content=include_content,
@@ -369,7 +450,7 @@ def get_state() -> RuntimeState:
 def ensure_agents(allow_rag: bool) -> None:
     """确保工单回复用 agno Agent（plain / rag）已初始化。"""
     state = get_state()
-    if state.agent_plain is not None and (not allow_rag or state.agent_rag is not None or not state.rag_enabled):
+    if state.agent_plain is not None and (not allow_rag or state.agent_rag is not None):
         return
     with _STATE_LOCK:
         if state.work_reply_runner is None:
@@ -431,8 +512,16 @@ async def agent_run(
         get_knowledge_sources(),
         extract_sources_from_agno_run_output(result),
     )
-    called_tools = get_tool_invocations()
-    audit = _build_tool_decision_audit(agent, called_tools)
+    called_tools = _merge_called_tools(
+        available_tools=available_tools,
+        recorded_tools=get_tool_invocations(),
+        run_out=result,
+    )
+    audit = _build_tool_decision_audit(
+        agent,
+        called_tools,
+        available_tools=available_tools,
+    )
     logger.info(
         "[Agent工具决策审计]\n"
         "可用工具数: %s\n"
@@ -476,7 +565,16 @@ async def agent_run_stream_collect(
                 get_knowledge_sources(),
                 extract_sources_from_agno_run_output(item),
             )
-            audit = _build_tool_decision_audit(agent, get_tool_invocations())
+            called_tools = _merge_called_tools(
+                available_tools=available_tools,
+                recorded_tools=get_tool_invocations(),
+                run_out=item,
+            )
+            audit = _build_tool_decision_audit(
+                agent,
+                called_tools,
+                available_tools=available_tools,
+            )
             logger.info(
                 "[Agent工具决策审计-流式]\n"
                 "可用工具数: %s\n"

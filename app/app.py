@@ -149,7 +149,7 @@ def _log_chat_completion(
         "LLM调用: %s\n"
         "Embedding调用: %s\n"
         "Telemetry调用: %s\n"
-        "命中文档数: %s\n"
+        "命中来源文件数: %s\n"
         "最终sources数: %s\n"
         "工具可用数: %s\n"
         "工具调用次数: %s\n"
@@ -172,6 +172,28 @@ def _log_chat_completion(
     )
 
 
+def _log_chat_request_payload(endpoint: str, chat_req: ChatRequest) -> None:
+    ctx = get_request_context()
+    payload = chat_req.model_dump(mode="json", exclude_none=False)
+    payload_json = json.dumps(payload, ensure_ascii=False)
+    logger.info(
+        "[请求入参] %s\n"
+        "request_id: %s\n"
+        "intent: %s\n"
+        "ticket_id: %s\n"
+        "session_id: %s\n"
+        "payload_size_bytes: %s\n"
+        "ChatRequest: %s",
+        endpoint,
+        str(ctx.get("request_id") or ""),
+        str(chat_req.intent or ""),
+        str(chat_req.works_info.ticket_id or ""),
+        str(chat_req.session_id or ""),
+        len(payload_json.encode("utf-8")),
+        payload_json,
+    )
+
+
 async def _handle_chat(chat_req: ChatRequest) -> Dict[str, Any]:
     started_at = time.time()
     _ensure_chat_agents()
@@ -191,6 +213,7 @@ async def _handle_chat(chat_req: ChatRequest) -> Dict[str, Any]:
         sid or "",
         agent_sid or "",
     )
+    _log_chat_request_payload("/chat", chat_req)
     reset_knowledge_sources()
     try:
         # summary 意图
@@ -323,6 +346,7 @@ async def _handle_chat_stream(
             sid or "",
             agent_sid or "",
         )
+        _log_chat_request_payload("/chat/stream", chat_req)
 
         if chat_req.intent == "summary":
             if state.agent_summary is None:

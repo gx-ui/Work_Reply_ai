@@ -158,7 +158,7 @@ class KefuShouhouToolkit(Toolkit):
         Returns:
             str: 格式化结果，每条格式：【序号】[来源: file_name] 内容摘要
         """
-        record_tool_invocation("search_kefu_shouhou_knowledge")
+        record_tool_invocation("kefu_shouhou_toolkit.search_kefu_shouhou_knowledge")
         return self._core.search_as_string(query=query, limit=limit, file_name_filters=None)
 
 
@@ -200,7 +200,7 @@ class ZhuyishixiangToolkit(Toolkit):
         Returns:
             str: JSON 字符串 {{"unique_total_entities": N, "fields_name_list": [...]}}
         """
-        record_tool_invocation("list_zhuyishixiang_file_names")
+        record_tool_invocation("zhuyishixiang_toolkit.list_zhuyishixiang_file_names")
         return self._core.list_chunks_metadata(include_content=False, file_name_filters=file_name_filters)
 
     def search_zhuyishixiang_knowledge(
@@ -230,7 +230,7 @@ class ZhuyishixiangToolkit(Toolkit):
         Returns:
             str: 格式化结果，每条格式：【序号】[来源: file_name] 内容摘要
         """
-        record_tool_invocation("search_zhuyishixiang_knowledge")
+        record_tool_invocation("zhuyishixiang_toolkit.search_zhuyishixiang_knowledge")
         return self._core.search_as_string(query=query, limit=limit, file_name_filters=file_name_filters)
 
 

@@ -1,40 +1,66 @@
-2026-04-08 09:35:49,736 INFO work_reply_ai [rid=req-1775612149734-76036b intent=suggestion ticket=182673733 sid=182673733]
+
+--------------------------------------------------------------------------------
+2026-04-08 10:02:38,168 INFO work_reply_ai [rid=req-1775613757803-11080b intent=suggestion ticket=182673733 sid=182673733]
 收到 /chat intent=suggestion ticket_id=182673733 session_id=182673733 agent_session_id=182673733:suggestion
 --------------------------------------------------------------------------------
-2026-04-08 09:35:50,621 INFO work_reply_ai [rid=req-1775612150620-fef125 intent=query ticket=182673733 sid=182673733]
-收到 /chat intent=query ticket_id=182673733 session_id=182673733 agent_session_id=182673733:query
+2026-04-08 10:02:38,168 INFO work_reply_ai [rid=req-1775613757803-11080b intent=suggestion ticket=182673733 sid=182673733]
+[请求入参] /chat
+request_id: req-1775613757803-11080b
+intent: suggestion
+ticket_id: 182673733
+session_id: 182673733
+payload_size_bytes: 713
+ChatRequest: {"intent": "suggestion", "session_id": "182673733", "works_info": {"title": "南网在线商品破损", "ticket_id": "182673733", "desc": "这一箱的破损了怎么处理，拒收你们再重新发一箱。麻烦核实处理，谢谢", "history": [{"index": 1, "summary": "昨天 19:22回复了工单  回复内容：可以拒收退回，重新发"}], "priority": null, "status": null}, "core_info": {"customer_name": "", "project_name": "", "mall_name": ""}, "attention_info": {"project_attention": "", "supplier_attention": ""}, "query_info": {"query": "工单标题：南网在线商品破损\n工单描述：这一箱的破损了怎么处理，拒收你们再重新发一箱。麻烦核实处理，谢谢"}}
 --------------------------------------------------------------------------------
-2026-04-08 09:35:51,246 INFO work_reply_ai [rid=req-1775612151245-b51579 intent=summary ticket=182673733 sid=182673733]
+2026-04-08 10:02:39,033 INFO work_reply_ai [rid=req-1775613759032-37e532 intent=summary ticket=182673733 sid=182673733]
 收到 /chat intent=summary ticket_id=182673733 session_id=182673733 agent_session_id=182673733:summary
 --------------------------------------------------------------------------------
-2026-04-08 09:35:52,571 INFO httpx [rid=req-1775612150620-fef125 intent=query ticket=182673733 sid=182673733]
+2026-04-08 10:02:39,033 INFO work_reply_ai [rid=req-1775613759032-37e532 intent=summary ticket=182673733 sid=182673733]
+[请求入参] /chat
+request_id: req-1775613759032-37e532
+intent: summary
+ticket_id: 182673733
+session_id: 182673733
+payload_size_bytes: 710
+ChatRequest: {"intent": "summary", "session_id": "182673733", "works_info": {"title": "南网在线商品破损", "ticket_id": "182673733", "desc": "这一箱的破损了怎么处理，拒收你们再重新发一箱。麻烦核实处理，谢谢", "history": [{"index": 1, "summary": "昨天 19:22回复了工单  回复内容：可以拒收退回，重新发"}], "priority": null, "status": null}, "core_info": {"customer_name": "", "project_name": "", "mall_name": ""}, "attention_info": {"project_attention": "", "supplier_attention": ""}, "query_info": {"query": "工单标题：南网在线商品破损\n工单描述：这一箱的破损了怎么处理，拒收你们再重新发一箱。麻烦核实处理，谢谢"}}
+--------------------------------------------------------------------------------
+2026-04-08 10:02:39,973 INFO work_reply_ai [rid=req-1775613759972-7c4ebc intent=query ticket=182673733 sid=182673733]
+收到 /chat intent=query ticket_id=182673733 session_id=182673733 agent_session_id=182673733:query
+--------------------------------------------------------------------------------
+2026-04-08 10:02:39,973 INFO work_reply_ai [rid=req-1775613759972-7c4ebc intent=query ticket=182673733 sid=182673733]
+[请求入参] /chat
+request_id: req-1775613759972-7c4ebc
+intent: query
+ticket_id: 182673733
+session_id: 182673733
+payload_size_bytes: 473
+ChatRequest: {"intent": "query", "session_id": "182673733", "works_info": {"title": "南网在线商品破损", "ticket_id": "182673733", "desc": "这一箱的破损了怎么处理，拒收你们再重新发一箱。麻烦核实处理，谢谢", "history": [], "priority": null, "status": null}, "core_info": {"customer_name": "", "project_name": "", "mall_name": ""}, "attention_info": {"project_attention": "", "supplier_attention": ""}, "query_info": {"query": "南网售后规则"}}
+--------------------------------------------------------------------------------
+2026-04-08 10:02:40,151 INFO httpx [rid=req-1775613757803-11080b intent=suggestion ticket=182673733 sid=182673733]
 HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/2 200 OK"
 --------------------------------------------------------------------------------
-2026-04-08 09:35:52,573 INFO rag_retrieval_tool [rid=req-1775612150620-fef125 intent=query ticket=182673733 sid=182673733]
+2026-04-08 10:02:40,962 INFO httpx [rid=req-1775613759972-7c4ebc intent=query ticket=182673733 sid=182673733]
+HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/2 200 OK"
+--------------------------------------------------------------------------------
+2026-04-08 10:02:40,967 INFO rag_retrieval_tool [rid=req-1775613759972-7c4ebc intent=query ticket=182673733 sid=182673733]
 获取 file_name 元数据
 包含内容: False
 包含字段: None
 文件过滤: None
 --------------------------------------------------------------------------------
-2026-04-08 09:35:52,574 INFO milvus_tool [rid=req-1775612150620-fef125 intent=query ticket=182673733 sid=182673733]
+2026-04-08 10:02:40,968 INFO milvus_tool [rid=req-1775613759972-7c4ebc intent=query ticket=182673733 sid=182673733]
 从缓存文件读取 174 个 file_name（集合：kefubuzhishiku1028ban_20251028155535）
 --------------------------------------------------------------------------------
-2026-04-08 09:35:52,574 INFO agent_service [rid=req-1775612150620-fef125 intent=query ticket=182673733 sid=182673733]
+2026-04-08 10:02:40,969 INFO agent_service [rid=req-1775613759972-7c4ebc intent=query ticket=182673733 sid=182673733]
 [知识库检索完成] list_knowledge_base_chunks_metadata
 参数：{'include_content': False, 'file_name_filters': None}
 摘要：{'unique_total_entities': 174, 'unique_file_name_count': 174, 'unique_file_name_preview': ['不可联系项目.md', '企微话术.md', '中信项目售前处理.md', '内-TCL售后服务.md', '内-东鹏项目售后处理.md', '外-融选（衡久盈）售后.md', '315投诉项目后台操作手册.md', 'TCL项目后台操作手册.md', '内-中信卡中心项目售后处理.md', '内-中信项目售后处理.md', '内-中原银行售后处理.md', '内-中国邮政物资供应平台项目售后处理.md', '内-交通银行售后处理.md', '内-兴业银行售后处理.md', '内-军网其他问题.md', '内-农行小豆其他问题.md', '内-华润项目售后处理.md', '内-南网质检标准.md', '内-唐山银行项目售后处理.md', '内-壹钱包工单质检标准.md']}
-耗时：1ms
+耗时：2ms
 --------------------------------------------------------------------------------
-2026-04-08 09:35:52,727 INFO httpx [rid=req-1775612149734-76036b intent=suggestion ticket=182673733 sid=182673733]
-HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/2 200 OK"
---------------------------------------------------------------------------------
-2026-04-08 09:35:54,092 INFO httpx [rid=req-1775612151245-b51579 intent=summary ticket=182673733 sid=182673733]
-HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/2 200 OK"
---------------------------------------------------------------------------------
-2026-04-08 09:35:54,383 INFO httpx [rid=req-1775612149734-76036b intent=suggestion ticket=182673733 sid=182673733]
+2026-04-08 10:02:41,437 INFO httpx [rid=req-1775613757803-11080b intent=suggestion ticket=182673733 sid=182673733]
 HTTP Request: POST https://os-api.agno.com/telemetry/runs "HTTP/2 201 Created"
 --------------------------------------------------------------------------------
-2026-04-08 09:35:54,386 INFO agent_service [rid=req-1775612149734-76036b intent=suggestion ticket=182673733 sid=182673733]
+2026-04-08 10:02:41,442 INFO agent_service [rid=req-1775613757803-11080b intent=suggestion ticket=182673733 sid=182673733]
 [Agent工具决策审计]
 可用工具数: 2
 可用工具: ['knowledge_retrieval_toolkit.search_knowledge_base', 'knowledge_retrieval_toolkit.list_knowledge_base_chunks_metadata']
@@ -42,14 +68,14 @@ HTTP Request: POST https://os-api.agno.com/telemetry/runs "HTTP/2 201 Created"
 实际调用工具: {}
 未调用原因标签: model_direct_answer_or_prompt_judged_no_tool
 --------------------------------------------------------------------------------
-2026-04-08 09:35:54,708 INFO work_reply_ai [rid=req-1775612149734-76036b intent=suggestion ticket=182673733 sid=182673733]
+2026-04-08 10:02:41,510 INFO work_reply_ai [rid=req-1775613757803-11080b intent=suggestion ticket=182673733 sid=182673733]
 [请求完成] /chat
 intent: suggestion
-总耗时: 4972ms
+总耗时: 3704ms
 LLM调用: 1
 Embedding调用: 0
 Telemetry调用: 1
-命中文档数: 0
+命中来源文件数: 0
 最终sources数: 0
 工具可用数: 2
 工具调用次数: 0
@@ -57,35 +83,26 @@ Telemetry调用: 1
 未调用原因标签: model_direct_answer_or_prompt_judged_no_tool
 fallback_used: False
 --------------------------------------------------------------------------------
-2026-04-08 09:35:54,709 INFO work_reply_ai [rid=req-1775612149734-76036b intent=- ticket=- sid=-]
+2026-04-08 10:02:41,511 INFO work_reply_ai [rid=req-1775613757803-11080b intent=suggestion ticket=182673733 sid=182673733]
 HTTP请求完成
 方法: POST
 路径: /cs_assist_ai/chat
 状态码: 200
-耗时: 4.975s
-LLM调用: 0
+耗时: 3.707s
+LLM调用: 1
 Embedding调用: 0
-Telemetry调用: 0
+Telemetry调用: 1
 --------------------------------------------------------------------------------
-2026-04-08 09:35:54,709 INFO uvicorn.access [rid=- intent=- ticket=- sid=-]
-127.0.0.1:59979 - "POST /cs_assist_ai/chat HTTP/1.1" 200
+2026-04-08 10:02:41,511 INFO uvicorn.access [rid=- intent=- ticket=- sid=-]
+127.0.0.1:57406 - "POST /cs_assist_ai/chat HTTP/1.1" 200
 --------------------------------------------------------------------------------
-2026-04-08 09:35:54,813 INFO httpx [rid=req-1775612150620-fef125 intent=query ticket=182673733 sid=182673733]
+2026-04-08 10:02:41,648 INFO httpx [rid=req-1775613759032-37e532 intent=summary ticket=182673733 sid=182673733]
 HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/2 200 OK"
 --------------------------------------------------------------------------------
-2026-04-08 09:35:54,815 INFO rag_retrieval_tool [rid=req-1775612150620-fef125 intent=query ticket=182673733 sid=182673733]
-检索开始
-查询: '商品破损 拒收 补发 处理流程'
-限制: 8
-文件过滤: ["内-南网售后处理.md", "外-南网售后处理.md", "内-南网质检标准.md", "南网项目后台操作手册.md", "内-南网客户常见问题.md"]
---------------------------------------------------------------------------------
-2026-04-08 09:35:56,048 INFO httpx [rid=req-1775612150620-fef125 intent=query ticket=182673733 sid=182673733]
-HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings "HTTP/1.1 200 OK"
---------------------------------------------------------------------------------
-2026-04-08 09:35:56,162 INFO httpx [rid=req-1775612151245-b51579 intent=summary ticket=182673733 sid=182673733]
+2026-04-08 10:02:42,776 INFO httpx [rid=req-1775613759032-37e532 intent=summary ticket=182673733 sid=182673733]
 HTTP Request: POST https://os-api.agno.com/telemetry/runs "HTTP/2 201 Created"
 --------------------------------------------------------------------------------
-2026-04-08 09:35:56,165 INFO agent_service [rid=req-1775612151245-b51579 intent=summary ticket=182673733 sid=182673733]
+2026-04-08 10:02:42,779 INFO agent_service [rid=req-1775613759032-37e532 intent=summary ticket=182673733 sid=182673733]
 [Agent工具决策审计]
 可用工具数: 3
 可用工具: ['kefu_shouhou_toolkit.search_kefu_shouhou_knowledge', 'zhuyishixiang_toolkit.list_zhuyishixiang_file_names', 'zhuyishixiang_toolkit.search_zhuyishixiang_knowledge']
@@ -93,14 +110,14 @@ HTTP Request: POST https://os-api.agno.com/telemetry/runs "HTTP/2 201 Created"
 实际调用工具: {}
 未调用原因标签: model_direct_answer_or_prompt_judged_no_tool
 --------------------------------------------------------------------------------
-2026-04-08 09:35:56,639 INFO work_reply_ai [rid=req-1775612151245-b51579 intent=summary ticket=182673733 sid=182673733]
+2026-04-08 10:02:42,829 INFO work_reply_ai [rid=req-1775613759032-37e532 intent=summary ticket=182673733 sid=182673733]
 [请求完成] /chat
 intent: summary
-总耗时: 5393ms
+总耗时: 3796ms
 LLM调用: 1
 Embedding调用: 0
 Telemetry调用: 1
-命中文档数: 0
+命中来源文件数: 0
 最终sources数: 0
 工具可用数: 3
 工具调用次数: 0
@@ -108,195 +125,98 @@ Telemetry调用: 1
 未调用原因标签: model_direct_answer_or_prompt_judged_no_tool
 fallback_used: False
 --------------------------------------------------------------------------------
-2026-04-08 09:35:56,640 INFO work_reply_ai [rid=req-1775612151245-b51579 intent=- ticket=- sid=-]
+2026-04-08 10:02:42,830 INFO work_reply_ai [rid=req-1775613759032-37e532 intent=summary ticket=182673733 sid=182673733]
 HTTP请求完成
 方法: POST
 路径: /cs_assist_ai/chat
 状态码: 200
-耗时: 5.395s
-LLM调用: 0
+耗时: 3.798s
+LLM调用: 1
 Embedding调用: 0
-Telemetry调用: 0
+Telemetry调用: 1
 --------------------------------------------------------------------------------
-2026-04-08 09:35:56,640 INFO uvicorn.access [rid=- intent=- ticket=- sid=-]
-127.0.0.1:53592 - "POST /cs_assist_ai/chat HTTP/1.1" 200
+2026-04-08 10:02:42,830 INFO uvicorn.access [rid=- intent=- ticket=- sid=-]
+127.0.0.1:60079 - "POST /cs_assist_ai/chat HTTP/1.1" 200
 --------------------------------------------------------------------------------
-2026-04-08 09:35:56,646 INFO milvus_tool [rid=req-1775612150620-fef125 intent=query ticket=182673733 sid=182673733]
+2026-04-08 10:02:43,252 INFO httpx [rid=req-1775613759972-7c4ebc intent=query ticket=182673733 sid=182673733]
+HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/2 200 OK"
+--------------------------------------------------------------------------------
+2026-04-08 10:02:43,254 INFO rag_retrieval_tool [rid=req-1775613759972-7c4ebc intent=query ticket=182673733 sid=182673733]
+检索开始
+查询: '商品破损 拒收 补发 处理流程'
+限制: 5
+文件过滤: ["内-南网售后处理.md", "外-南网售后处理.md", "内-南网质检标准.md", "南网项目后台操作手册.md"]
+--------------------------------------------------------------------------------
+2026-04-08 10:02:44,771 INFO httpx [rid=req-1775613759972-7c4ebc intent=query ticket=182673733 sid=182673733]
+HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings "HTTP/1.1 200 OK"
+--------------------------------------------------------------------------------
+2026-04-08 10:02:45,209 INFO milvus_tool [rid=req-1775613759972-7c4ebc intent=query ticket=182673733 sid=182673733]
  [父子召回解析]
- 输入：8
- 输出：8
+ 输入：5
+ 输出：5
  child 替换：1
  去重跳过：0
  示例：[{'child_id': '170', 'parent_id': '146', 'file_name': '内-南网质检标准.md'}]
 --------------------------------------------------------------------------------
-2026-04-08 09:35:56,646 INFO milvus_tool [rid=req-1775612150620-fef125 intent=query ticket=182673733 sid=182673733]
+2026-04-08 10:02:45,210 INFO milvus_tool [rid=req-1775613759972-7c4ebc intent=query ticket=182673733 sid=182673733]
  [父子召回完成]
  启用：True
- 召回前：总数=8 (child=1, parent=0)
- 召回后：总数=8 (parent=0)
+ 召回前：总数=5 (child=1, parent=0)
+ 召回后：总数=5 (parent=0)
 --------------------------------------------------------------------------------
-2026-04-08 09:35:56,646 INFO rag_retrieval_tool [rid=req-1775612150620-fef125 intent=query ticket=182673733 sid=182673733]
+2026-04-08 10:02:45,210 INFO rag_retrieval_tool [rid=req-1775613759972-7c4ebc intent=query ticket=182673733 sid=182673733]
 Milvus 检索完成
 策略: file_name过滤搜索
-条数: 8
-预览: [{'file_name': '内-南网售后处理.md', 'text_preview': '# 问题：退货同意后，客服一定要注意什么'}, {'file_name': '内-南网质检标准.md', 'text_preview': '# 问题：南网质检标准有哪些\n## 答案：\n### 1. 所有南网后台20:30（高峰期18点前）之前的投诉，后台处理客服当天需全部回复，并都需要电联客户以及新建七鱼工单；\n### 2. 首次电联客户下单手机号码若无法接通，需立即拨打第二次，若仍未接通，需联系客户收货电话号码；\n### 3. 所有南网后台投诉工单，工单标题要改为“南网后台TS投诉 XXX”，若已有七鱼工单，处理南网后台的客服需将工单标题修改为“南网后台TS投诉 XXX”；\n### 4. 南网后台投诉工单需工单受理人日跟进，两天内必须联系客户告知处理方案，若无法及时给予处理方案的，要申请添加客户微信跟进，客户不愿意添加的要与客户约定下次联系时间，跟进内容需完整更新至七鱼工单；\n### 5. 需反馈供应商核实处理的，供应商需在4小时内告知处理方案，若未回复客服需@采购/品类协助处理，不可等到第二天再跟进；\n### 6. 如南网后台回退T+1时间内还是未有核实结果，需由当天值班人员回复南网后台，回复模版”老师，您好，已反馈核实，目前还在核实中........."\n### 7. 完结南网后台投诉工单时：\n#### 7.1. 客服必须电联客户或微信联系告知处理结果并让客户撤诉（微信联系工单需附上微信沟通记录），客服需在工单内填写客户是否同意撤诉。\n#### 7.2. 若联系不上客户的，当天分时段再联系客户1次，依然联系不上的，第二天早上再联系一次。最终无法联系上的需发“完结工单撤诉短信”后再完结工单。\n---\n# 问：平均响应时间（客户进入咨询页面发起会话，客服响应客户的整个会话平均时长不高于45s，计算公式为（客服响应时间总和 + 供应商不在线时间总和）/ 咨询会话总回合数）要求\n## 答：\n违约金标准：≥45s~＜60s，支付违约金10000元；≥60s~＜90s，支付违约金30000元；≥90s，支付违约金70000元。\n---\n# 问：满意度是什么标准进行处罚？'}, {'file_name': '内-南网客户常见问题.md', 'text_preview': '## 9. 商品质量问题\n若图片无法体现，需客户提供视频；但客户无法在平台发送视频时，需获取其微信号。\n**话术**：  \n请您提供一下微信号，这边反馈售后添加您好友，您将图片/视频发送给售后那边核实处理的，请您留意微信的添加'}, {'file_name': '内-南网售后处理.md', 'text_preview': '## 答案：\n退货同意之后，需要跟进客户退货单号，如果客户随便上传了一个单号物流显示签收的，后台就会自动给客户退款，容易造成订单退款商品未退回\n---'}, {'file_name': '内-南网售后处理.md', 'text_preview': '## 2. 订单出现了物流停滞，无物流信息等异常情况时，我们反馈供应商后，原单物流直接更新签收了，这时候客户问题已经解决了，但是南网后台可能并没有闭环妥投：\n正确操作流程：登录南网后台，查看物流订阅状态不是妥投的，就要做重新订阅；重新订阅步骤：商家订单管理-福利配货单工作台-订单编号（外部订单编号）-更新物流信息-复制原单号-在原单号后加一位数字确认更正单号-再把原单号重新订阅上去'}]
+条数: 5
+预览: [{'file_name': '内-南网售后处理.md', 'text_preview': '# 问题：退货同意后，客服一定要注意什么'}, {'file_name': '内-南网质检标准.md', 'text_preview': '# 问题：南网质检标准有哪些\n## 答案：\n### 1. 所有南网后台20:30（高峰期18点前）之前的投诉，后台处理客服当天需全部回复，并都需要电联客户以及新建七鱼工单；\n### 2. 首次电联客户下单手机号码若无法接通，需立即拨打第二次，若仍未接通，需联系客户收货电话号码；\n### 3. 所有南网后台投诉工单，工单标题要改为“南网后台TS投诉 XXX”，若已有七鱼工单，处理南网后台的客服需将工单标题修改为“南网后台TS投诉 XXX”；\n### 4. 南网后台投诉工单需工单受理人日跟进，两天内必须联系客户告知处理方案，若无法及时给予处理方案的，要申请添加客户微信跟进，客户不愿意添加的要与客户约定下次联系时间，跟进内容需完整更新至七鱼工单；\n### 5. 需反馈供应商核实处理的，供应商需在4小时内告知处理方案，若未回复客服需@采购/品类协助处理，不可等到第二天再跟进；\n### 6. 如南网后台回退T+1时间内还是未有核实结果，需由当天值班人员回复南网后台，回复模版”老师，您好，已反馈核实，目前还在核实中........."\n### 7. 完结南网后台投诉工单时：\n#### 7.1. 客服必须电联客户或微信联系告知处理结果并让客户撤诉（微信联系工单需附上微信沟通记录），客服需在工单内填写客户是否同意撤诉。\n#### 7.2. 若联系不上客户的，当天分时段再联系客户1次，依然联系不上的，第二天早上再联系一次。最终无法联系上的需发“完结工单撤诉短信”后再完结工单。\n---\n# 问：平均响应时间（客户进入咨询页面发起会话，客服响应客户的整个会话平均时长不高于45s，计算公式为（客服响应时间总和 + 供应商不在线时间总和）/ 咨询会话总回合数）要求\n## 答：\n违约金标准：≥45s~＜60s，支付违约金10000元；≥60s~＜90s，支付违约金30000元；≥90s，支付违约金70000元。\n---\n# 问：满意度是什么标准进行处罚？'}, {'file_name': '内-南网售后处理.md', 'text_preview': '## 答案：\n退货同意之后，需要跟进客户退货单号，如果客户随便上传了一个单号物流显示签收的，后台就会自动给客户退款，容易造成订单退款商品未退回\n---'}, {'file_name': '内-南网售后处理.md', 'text_preview': '## 2. 订单出现了物流停滞，无物流信息等异常情况时，我们反馈供应商后，原单物流直接更新签收了，这时候客户问题已经解决了，但是南网后台可能并没有闭环妥投：\n正确操作流程：登录南网后台，查看物流订阅状态不是妥投的，就要做重新订阅；重新订阅步骤：商家订单管理-福利配货单工作台-订单编号（外部订单编号）-更新物流信息-复制原单号-在原单号后加一位数字确认更正单号-再把原单号重新订阅上去'}, {'file_name': '内-南网售后处理.md', 'text_preview': '# 问题：南网如果云台显示已发货，一般多久之后客户不能发起仅退款，只能发起退货退款'}]
 --------------------------------------------------------------------------------
-2026-04-08 09:35:56,647 INFO agent_service [rid=req-1775612150620-fef125 intent=query ticket=182673733 sid=182673733]
+2026-04-08 10:02:45,210 INFO agent_service [rid=req-1775613759972-7c4ebc intent=query ticket=182673733 sid=182673733]
 [知识库检索完成] search_knowledge_base
 查询：'商品破损 拒收 补发 处理流程'
-限制：8
-文件过滤：["内-南网售后处理.md", "外-南网售后处理.md", "内-南网质检标准.md", "南网项目后台操作手册.md", "内-南网客户常见问题.md"]
-返回条数：8
-耗时：1831ms
+限制：5
+文件过滤：["内-南网售后处理.md", "外-南网售后处理.md", "内-南网质检标准.md", "南网项目后台操作手册.md"]
+返回条数：5
+耗时：1956ms
 --------------------------------------------------------------------------------
-2026-04-08 09:36:03,571 INFO httpx [rid=req-1775612150620-fef125 intent=query ticket=182673733 sid=182673733]
+2026-04-08 10:02:57,949 INFO httpx [rid=req-1775613759972-7c4ebc intent=query ticket=182673733 sid=182673733]
 HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/2 200 OK"
 --------------------------------------------------------------------------------
-2026-04-08 09:36:04,859 INFO httpx [rid=req-1775612150620-fef125 intent=query ticket=182673733 sid=182673733]
+2026-04-08 10:02:59,142 INFO httpx [rid=req-1775613759972-7c4ebc intent=query ticket=182673733 sid=182673733]
 HTTP Request: POST https://os-api.agno.com/telemetry/runs "HTTP/2 201 Created"
 --------------------------------------------------------------------------------
-2026-04-08 09:36:04,861 INFO agent_service [rid=req-1775612150620-fef125 intent=query ticket=182673733 sid=182673733]
+2026-04-08 10:02:59,145 INFO agent_service [rid=req-1775613759972-7c4ebc intent=query ticket=182673733 sid=182673733]
 [Agent工具决策审计]
 可用工具数: 2
 可用工具: ['knowledge_retrieval_toolkit.search_knowledge_base', 'knowledge_retrieval_toolkit.list_knowledge_base_chunks_metadata']
-实际调用次数: 0
-实际调用工具: {}
-未调用原因标签: model_direct_answer_or_prompt_judged_no_tool
+实际调用次数: 4
+实际调用工具: {'knowledge_retrieval_toolkit.list_knowledge_base_chunks_metadata': 2, 'knowledge_retrieval_toolkit.search_knowledge_base': 2}
+未调用原因标签: tools_called
 --------------------------------------------------------------------------------
-2026-04-08 09:36:05,233 INFO work_reply_ai [rid=req-1775612150620-fef125 intent=query ticket=182673733 sid=182673733]
+2026-04-08 10:02:59,196 INFO work_reply_ai [rid=req-1775613759972-7c4ebc intent=query ticket=182673733 sid=182673733]
 [请求完成] /chat
 intent: query
-总耗时: 14611ms
+总耗时: 19222ms
 LLM调用: 3
-Embedding调用: 0
+Embedding调用: 1
 Telemetry调用: 1
-命中文档数: 3
-最终sources数: 3
-工具可用数: 2
-工具调用次数: 0
-工具调用详情: {}
-未调用原因标签: model_direct_answer_or_prompt_judged_no_tool
-fallback_used: False
---------------------------------------------------------------------------------
-2026-04-08 09:36:05,233 INFO work_reply_ai [rid=req-1775612150620-fef125 intent=- ticket=- sid=-]
-HTTP请求完成
-方法: POST
-路径: /cs_assist_ai/chat
-状态码: 200
-耗时: 14.613s
-LLM调用: 0
-Embedding调用: 0
-Telemetry调用: 0
---------------------------------------------------------------------------------
-2026-04-08 09:36:05,233 INFO uvicorn.access [rid=- intent=- ticket=- sid=-]
-127.0.0.1:50180 - "POST /cs_assist_ai/chat HTTP/1.1" 200
---------------------------------------------------------------------------------
-2026-04-08 09:45:30,688 INFO work_reply_ai [rid=req-1775612730687-66903c intent=summary ticket=182673733 sid=182673733]
-收到 /chat intent=summary ticket_id=182673733 session_id=182673733 agent_session_id=182673733:summary
---------------------------------------------------------------------------------
-2026-04-08 09:45:32,777 INFO httpx [rid=req-1775612730687-66903c intent=summary ticket=182673733 sid=182673733]
-HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/2 200 OK"
---------------------------------------------------------------------------------
-2026-04-08 09:45:32,778 INFO summary_rag_tools [rid=req-1775612730687-66903c intent=summary ticket=182673733 sid=182673733]
-[Zhuyishixiang] 获取元数据 | 过滤: None
---------------------------------------------------------------------------------
-2026-04-08 09:45:32,778 INFO summary_rag_tools [rid=req-1775612730687-66903c intent=summary ticket=182673733 sid=182673733]
-[KefuShouhou] 检索开始
-查询: '商品破损 拒收 补发流程'
-limit: 5
-过滤: None
---------------------------------------------------------------------------------
-2026-04-08 09:45:32,780 INFO milvus_tool [rid=req-1775612730687-66903c intent=summary ticket=182673733 sid=182673733]
-从缓存文件读取 44 个 file_name（集合：kefushouhouxiangmuzhuyishixiang_20260313112954）
---------------------------------------------------------------------------------
-2026-04-08 09:45:33,698 INFO httpx [rid=req-1775612730687-66903c intent=summary ticket=182673733 sid=182673733]
-HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings "HTTP/1.1 200 OK"
---------------------------------------------------------------------------------
-2026-04-08 09:45:33,856 INFO milvus_tool [rid=req-1775612730687-66903c intent=summary ticket=182673733 sid=182673733]
- [父子召回解析]
- 输入：1
- 输出：1
- child 替换：0
- 去重跳过：0
- 示例：[]
---------------------------------------------------------------------------------
-2026-04-08 09:45:33,856 INFO milvus_tool [rid=req-1775612730687-66903c intent=summary ticket=182673733 sid=182673733]
- [父子召回完成]
- 启用：True
- 召回前：总数=1 (child=0, parent=0)
- 召回后：总数=1 (parent=0)
---------------------------------------------------------------------------------
-2026-04-08 09:45:33,856 INFO summary_rag_tools [rid=req-1775612730687-66903c intent=summary ticket=182673733 sid=182673733]
-[KefuShouhou] Milvus 完成 | 策略: 全量兜底 | 条数: 1
---------------------------------------------------------------------------------
-2026-04-08 09:45:35,606 INFO httpx [rid=req-1775612730687-66903c intent=summary ticket=182673733 sid=182673733]
-HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/2 200 OK"
---------------------------------------------------------------------------------
-2026-04-08 09:45:35,608 INFO summary_rag_tools [rid=req-1775612730687-66903c intent=summary ticket=182673733 sid=182673733]
-[Zhuyishixiang] 检索开始
-查询: '商品破损 拒收 补发流程'
-limit: 5
-过滤: ["南网项目注意事项.md"]
---------------------------------------------------------------------------------
-2026-04-08 09:45:36,284 INFO httpx [rid=req-1775612730687-66903c intent=summary ticket=182673733 sid=182673733]
-HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings "HTTP/1.1 200 OK"
---------------------------------------------------------------------------------
-2026-04-08 09:45:36,469 INFO milvus_tool [rid=req-1775612730687-66903c intent=summary ticket=182673733 sid=182673733]
- [父子召回解析]
- 输入：1
- 输出：1
- child 替换：0
- 去重跳过：0
- 示例：[]
---------------------------------------------------------------------------------
-2026-04-08 09:45:36,469 INFO milvus_tool [rid=req-1775612730687-66903c intent=summary ticket=182673733 sid=182673733]
- [父子召回完成]
- 启用：True
- 召回前：总数=1 (child=0, parent=0)
- 召回后：总数=1 (parent=0)
---------------------------------------------------------------------------------
-2026-04-08 09:45:36,469 INFO summary_rag_tools [rid=req-1775612730687-66903c intent=summary ticket=182673733 sid=182673733]
-[Zhuyishixiang] Milvus 完成 | 策略: file_name过滤搜索 | 条数: 1
---------------------------------------------------------------------------------
-2026-04-08 09:45:40,682 INFO httpx [rid=req-1775612730687-66903c intent=summary ticket=182673733 sid=182673733]
-HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/2 200 OK"
---------------------------------------------------------------------------------
-2026-04-08 09:45:42,866 INFO httpx [rid=req-1775612730687-66903c intent=summary ticket=182673733 sid=182673733]
-HTTP Request: POST https://os-api.agno.com/telemetry/runs "HTTP/2 201 Created"
---------------------------------------------------------------------------------
-2026-04-08 09:45:42,869 INFO agent_service [rid=req-1775612730687-66903c intent=summary ticket=182673733 sid=182673733]
-[Agent工具决策审计]
-可用工具数: 3
-可用工具: ['kefu_shouhou_toolkit.search_kefu_shouhou_knowledge', 'zhuyishixiang_toolkit.list_zhuyishixiang_file_names', 'zhuyishixiang_toolkit.search_zhuyishixiang_knowledge']
-实际调用次数: 0
-实际调用工具: {}
-未调用原因标签: model_direct_answer_or_prompt_judged_no_tool
---------------------------------------------------------------------------------
-2026-04-08 09:45:42,948 INFO work_reply_ai [rid=req-1775612730687-66903c intent=summary ticket=182673733 sid=182673733]
-[请求完成] /chat
-intent: summary
-总耗时: 12259ms
-LLM调用: 3
-Embedding调用: 0
-Telemetry调用: 1
-命中文档数: 2
+命中来源文件数: 2
 最终sources数: 2
-工具可用数: 3
-工具调用次数: 0
-工具调用详情: {}
-未调用原因标签: model_direct_answer_or_prompt_judged_no_tool
+工具可用数: 2
+工具调用次数: 4
+工具调用详情: {'knowledge_retrieval_toolkit.list_knowledge_base_chunks_metadata': 2, 'knowledge_retrieval_toolkit.search_knowledge_base': 2}
+未调用原因标签: tools_called
 fallback_used: False
 --------------------------------------------------------------------------------
-2026-04-08 09:45:42,948 INFO work_reply_ai [rid=req-1775612730687-66903c intent=- ticket=- sid=-]
+2026-04-08 10:02:59,197 INFO work_reply_ai [rid=req-1775613759972-7c4ebc intent=query ticket=182673733 sid=182673733]
 HTTP请求完成
 方法: POST
 路径: /cs_assist_ai/chat
 状态码: 200
-耗时: 12.261s
-LLM调用: 0
-Embedding调用: 0
-Telemetry调用: 0
+耗时: 19.225s
+LLM调用: 3
+Embedding调用: 1
+Telemetry调用: 1
 --------------------------------------------------------------------------------
-2026-04-08 09:45:42,948 INFO uvicorn.access [rid=- intent=- ticket=- sid=-]
-127.0.0.1:63977 - "POST /cs_assist_ai/chat HTTP/1.1" 200
+2026-04-08 10:02:59,197 INFO uvicorn.access [rid=- intent=- ticket=- sid=-]
+127.0.0.1:50403 - "POST /cs_assist_ai/chat HTTP/1.1" 200
 --------------------------------------------------------------------------------
