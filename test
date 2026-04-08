@@ -1,0 +1,124 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+读取 config.json 中 milvus_zhuyishixiang 配置，连接 Milvus，
+随机抽取 10 个 chunks 并输出 file_name + content。
+"""
+
+from __future__ import annotations
+
+import json
+import random
+import argparse
+from pathlib import Path
+from typing import List, Dict, Any
+
+from pymilvus import connections, Collection, DataType
+
+
+def default_query_expr(collection: Collection) -> str:
+    """给 query 一个稳定兜底表达式。"""
+    pk_field = None
+    for field in collection.schema.fields:
+        if getattr(field, "is_primary", False):
+            pk_field = field
+            break
+    if pk_field is None:
+        return 'file_name != ""'
+    if pk_field.dtype in (DataType.INT64, DataType.INT32, DataType.INT16, DataType.INT8):
+        return f"{pk_field.name} >= 0"
+    return f'{pk_field.name} != ""'
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Milvus 数据抽样与缓存更新工具")
+    parser.add_argument(
+        "--update-cache",
+        action="store_true",
+        help="更新 config/cache_<collection_name>.json 文件",
+    )
+    parser.add_argument(
+        "--sample-size",
+        type=int,
+        default=10,
+        help="随机抽样数量（默认 10）",
+    )
+    args = parser.parse_args()
+
+    root = Path(__file__).resolve().parent
+    cfg_path = root / "config" / "config.json"
+    if not cfg_path.exists():
+        raise FileNotFoundError(f"未找到配置文件: {cfg_path}")
+
+    cfg: Dict[str, Any] = json.loads(cfg_path.read_text(encoding="utf-8"))
+    mv = cfg.get("milvus_zhuyishixiang") or {}
+    host = mv.get("host")
+    port = mv.get("port", 19530)
+    db_name = mv.get("db_name", "default")
+    collection_name = mv.get("collection_name")
+    output_field = str(mv.get("output_field") or "content")
+    if not host or not collection_name:
+        raise ValueError("milvus_zhuyishixiang 配置缺少 host 或 collection_name")
+
+    alias = "tmp_list_zhuyishixiang_random_chunks"
+    connections.connect(alias=alias, host=host, port=str(port), db_name=db_name)
+    collection = Collection(collection_name, using=alias)
+    collection.load()
+
+    expr = default_query_expr(collection)
+    batch_size = 1000
+    offset = 0
+    rows: List[Dict[str, Any]] = []
+
+    while True:
+        batch = collection.query(
+            expr=expr,
+            output_fields=["file_name", output_field],
+            limit=batch_size,
+            offset=offset,
+        )
+        if not batch:
+            break
+        rows.extend(batch)
+        offset += len(batch)
+        if len(batch) < batch_size:
+            break
+
+    print(f"collection: {collection_name}")
+    print(f"total_rows: {len(rows)}")
+    print(f"output_field: {output_field}")
+    if not rows:
+        print("未查询到任何 chunk。")
+        connections.disconnect(alias=alias)
+        return
+
+    if args.update_cache:
+        fields_name_set = {str(row.get("file_name", "")).strip() for row in rows if str(row.get("file_name", "")).strip()}
+        cache_data = {
+            "unique_total_entities": len(fields_name_set),
+            "fields_name_list": sorted(fields_name_set),
+        }
+        cache_file = root / "config" / f"cache_{collection_name}.json"
+        cache_file.write_text(json.dumps(cache_data, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(f"cache_file: {cache_file}")
+        print(f"cache_unique_total_entities: {cache_data['unique_total_entities']}")
+        connections.disconnect(alias=alias)
+        return
+
+    sample_size = min(max(args.sample_size, 1), len(rows))
+    sampled_rows = random.sample(rows, sample_size)
+    print(f"sample_size: {sample_size}")
+    print("-" * 60)
+
+    for i, row in enumerate(sampled_rows, 1):
+        file_name = str(row.get("file_name", "")).strip() or "（空）"
+        content = str(row.get(output_field, "")).strip() or "（空）"
+        print(f"[{i}] file_name: {file_name}")
+        print(f"[{i}] content: {content}")
+        print("-" * 60)
+
+    connections.disconnect(alias=alias)
+
+
+if __name__ == "__main__":
+    main()

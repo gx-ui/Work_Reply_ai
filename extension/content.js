@@ -617,25 +617,6 @@
     return names;
   }
 
-  /** 左栏「信息总结」下已展示的检索来源（建议接口未带 knowledge_sources 时回退展示） */
-  function parseKbSourceNamesFromSummaryColumn(box) {
-    const el = box && box.querySelector('.ai-summary-kb-sources');
-    if (!el || !el.classList.contains('visible')) return [];
-    const lines = (el.innerText || '').split(/\r?\n/);
-    const out = [];
-    const seen = new Set();
-    for (const line of lines) {
-      const idx = line.indexOf('•');
-      if (idx === -1) continue;
-      const n = line.slice(idx + 1).trim();
-      if (n && !seen.has(n)) {
-        seen.add(n);
-        out.push(n);
-      }
-    }
-    return out;
-  }
-
   // 将纯文本格式化为可读的 HTML（分段、分点）
   function formatSummaryText(text) {
     if (!text || text === '--' || text === '待确认' || text === '无') return escapeHtml(text);
@@ -2091,6 +2072,7 @@
       st.suggestionRequestToken = requestToken;
       st.lastConversationSnapshot = snapshot;
       st.lastConversationHash = snapshot.hash;
+      st.currentKnowledgeSources = [];
 
       // 显示加载状态
       showLoadingState(scopeRoot, options.message);
@@ -2253,6 +2235,7 @@
         return;
       }
       st.suggestionRequestToken = null;
+      st.currentKnowledgeSources = [];
       log(`生成建议失败: ${error.message}`, 'error');
 
       // 根据错误类型显示不同的用户友好消息
@@ -2516,6 +2499,7 @@
     st.summaryRequestToken = requestToken;
     st.summaryStatus = 'loading';
     st.summaryError = '';
+    st.lastSummarySources = [];
     syncAuxiliaryPanels(scopeRoot);
 
     try {
@@ -2613,6 +2597,7 @@
       st.summaryRequestToken = null;
       st.summaryStatus = 'error';
       st.summaryError = '生成失败';
+      st.lastSummarySources = [];
       log(`生成总结失败: ${error.message}`, 'error');
       st.lastUpdatedAt = Date.now();
       syncAuxiliaryPanels(scopeRoot);
@@ -3016,9 +3001,6 @@
     }
     if (!knowledgeSources.length) {
       knowledgeSources = extractSourceNamesFromBracketTags(suggestionText);
-    }
-    if (!knowledgeSources.length) {
-      knowledgeSources = parseKbSourceNamesFromSummaryColumn(box);
     }
     renderKbSourceNames(
       box.querySelector('.ai-suggestion-kb-sources'),
