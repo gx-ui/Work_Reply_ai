@@ -71,6 +71,129 @@
   const PANEL_STATE_GRACE_MS = 20000;
   const panelRegistry = new Map();
   let panelHostSeq = 0;
+  let suggestionLayoutResizeBound = false;
+  let suggestionLayoutResizeTimer = null;
+
+  function getScopeIdentityHint(scopeRoot) {
+    if (!scopeRoot || !(scopeRoot instanceof Element)) return '';
+    const ticketId = extractTicketIdFromFishdForm(scopeRoot);
+    if (ticketId) {
+      return `ticket:${String(ticketId).trim()}`;
+    }
+    const titleEl = scopeRoot.querySelector('.m-sheet-main .sheet-title .fishd-ellipsis-ellipsis');
+    const titleInput = scopeRoot.querySelector('.m-sheet-main .sheet-title input.fishd-input');
+    const title = extractNodeText(titleEl) || (titleInput && titleInput.value ? titleInput.value.trim() : '');
+    if (title) {
+      return `title:${title}`;
+    }
+    return '';
+  }
+
+  function getScopeSelectionScore(scopeRoot) {
+    if (!scopeRoot || !(scopeRoot instanceof Element)) return 0;
+    let score = getElementArea(scopeRoot);
+    if (scopeRoot.contains(document.activeElement)) score += 1e7;
+    if (scopeRoot.querySelector('.m-sheet-main')) score += 5e6;
+    if (scopeRoot.querySelector('.m-sheet-propertes')) score += 3e6;
+    if (scopeRoot.querySelector('.m-sheet-reply')) score += 2e6;
+    return score;
+  }
+
+  function dedupeScopesByIdentity(scopes) {
+    if (!Array.isArray(scopes) || scopes.length <= 1) {
+      return Array.isArray(scopes) ? scopes : [];
+    }
+    const identityByScope = new Map();
+    const bestScopeByIdentity = new Map();
+    const scoreByScope = new Map();
+    scopes.forEach((scope) => {
+      if (!(scope instanceof Element)) return;
+      const identity = getScopeIdentityHint(scope);
+      if (!identity) return;
+      // 只按明确 ticket_id 去重，避免不同工单同标题时被误合并
+      if (!identity.startsWith('ticket:')) return;
+      identityByScope.set(scope, identity);
+      const score = getScopeSelectionScore(scope);
+      scoreByScope.set(scope, score);
+      const currentBest = bestScopeByIdentity.get(identity);
+      if (!currentBest || score > (scoreByScope.get(currentBest) || 0)) {
+        bestScopeByIdentity.set(identity, scope);
+      }
+    });
+    if (bestScopeByIdentity.size === 0) return scopes;
+    return scopes.filter((scope) => {
+      const identity = identityByScope.get(scope);
+      if (!identity) return true;
+      return bestScopeByIdentity.get(identity) === scope;
+    });
+  }
+
+  function cleanupInactiveSuggestionBoxes(activeScopes) {
+    const scopes = Array.isArray(activeScopes) ? activeScopes : [];
+    if (scopes.length === 0) {
+      return;
+    }
+    const activeHostIds = new Set(
+      scopes
+        .filter((scope) => scope instanceof Element)
+        .map((scope) => getScopeHostId(scope))
+    );
+    document.querySelectorAll('.ai-suggestion-box').forEach((box) => {
+      const explicitHostId = box.dataset.scopeHostId || '';
+      const ownerScope = box.closest('.m-sheet-item, .m-detail-content-wrapper');
+      const inferredHostId = ownerScope ? getScopeHostId(ownerScope) : '';
+      const hostId = explicitHostId || inferredHostId;
+      if (!hostId) return;
+      if (!activeHostIds.has(hostId) && box.parentNode) {
+        box.parentNode.removeChild(box);
+      }
+    });
+  }
+
+  function resolveSuggestionBoxHostId(box, fallbackScope = null) {
+    if (!box || !(box instanceof Element)) return '';
+    const explicitHostId = box.dataset.scopeHostId || '';
+    if (explicitHostId) return explicitHostId;
+    const ownerScope =
+      box.closest('.m-sheet-item') ||
+      box.closest('.m-detail-content-wrapper') ||
+      (fallbackScope instanceof Element ? fallbackScope : null);
+    if (!(ownerScope instanceof Element)) return '';
+    return getScopeHostId(ownerScope);
+  }
+
+  function updateSuggestionBoxLayoutMode(box) {
+    if (!box || !(box instanceof Element)) return;
+    const width = Math.max(box.clientWidth || 0, box.getBoundingClientRect ? box.getBoundingClientRect().width : 0);
+    const compact = width > 0 && width < 980;
+    const ultraCompact = width > 0 && width < 640;
+    box.classList.toggle('ai-compact', compact);
+    box.classList.toggle('ai-ultra-compact', ultraCompact);
+  }
+
+  function refreshAllSuggestionBoxLayoutModes() {
+    document.querySelectorAll('.ai-suggestion-box').forEach((box) => {
+      updateSuggestionBoxLayoutMode(box);
+    });
+  }
+
+  function ensureSuggestionBoxLayoutResizeListener() {
+    if (suggestionLayoutResizeBound) return;
+    suggestionLayoutResizeBound = true;
+    const onResize = () => {
+      if (suggestionLayoutResizeTimer) {
+        clearTimeout(suggestionLayoutResizeTimer);
+      }
+      suggestionLayoutResizeTimer = setTimeout(() => {
+        suggestionLayoutResizeTimer = null;
+        refreshAllSuggestionBoxLayoutModes();
+      }, 80);
+    };
+    window.addEventListener('resize', onResize, { passive: true });
+    if (window.visualViewport && typeof window.visualViewport.addEventListener === 'function') {
+      window.visualViewport.addEventListener('resize', onResize, { passive: true });
+    }
+  }
 
   function getElementArea(el) {
     if (!el || !(el instanceof Element) || !el.isConnected) return 0;
@@ -276,16 +399,18 @@
       });
     }
     if (out.length > 0) {
-      prunePanelRegistry(out);
-      return out;
+      const deduped = dedupeScopesByIdentity(out);
+      prunePanelRegistry(deduped);
+      return deduped;
     }
     const replies = document.querySelectorAll('.m-sheet-reply');
     if (replies.length > 1) {
       replies.forEach((r) => {
         add(r.closest('.m-sheet-item') || r.closest('.m-detail-content-wrapper') || r.parentElement || r);
       });
-      prunePanelRegistry(out);
-      return out;
+      const deduped = dedupeScopesByIdentity(out);
+      prunePanelRegistry(deduped);
+      return deduped;
     }
     const anchor = getWorksheetUiAnchor();
     if (anchor) {
@@ -293,8 +418,9 @@
     } else if (document.body) {
       if (isInteractiveWorksheetScope(document.body)) add(document.body);
     }
-    prunePanelRegistry(out);
-    return out;
+    const deduped = dedupeScopesByIdentity(out);
+    prunePanelRegistry(deduped);
+    return deduped;
   }
 
   function getDefaultScope() {
@@ -1121,7 +1247,9 @@
 
   function ensureWorksheetAssistantMounted() {
     setupWorksheetObserver();
-    getWorksheetPanelScopes().forEach((scopeRoot) => {
+    const scopes = getWorksheetPanelScopes();
+    cleanupInactiveSuggestionBoxes(scopes);
+    scopes.forEach((scopeRoot) => {
       if (!isWorksheetModeForScope(scopeRoot)) return;
       const st = panelState(scopeRoot);
       const hadBox = Boolean(scopeRoot.querySelector('.ai-suggestion-box'));
@@ -1157,6 +1285,7 @@
         });
       }
     });
+    refreshAllSuggestionBoxLayoutModes();
   }
 
   function extractNodeText(el) {
@@ -1565,7 +1694,7 @@
   }
 
   function debugTicketExtraction(ticketData) {
-    if (!ticketData) return;
+    if (!DEBUG || !ticketData) return;
     const payload = {
       ticket_id: ticketData.ticket_id || null,
       ticket_no: ticketData.ticket_no || null,
@@ -1581,7 +1710,6 @@
     if (ticketData.history_items && ticketData.history_items.length > 0) {
       console.table(ticketData.history_items.map((item, i) => ({ index: i + 1, summary: item })));
     }
-    console.groupEnd();
   }
 
   /**
@@ -2120,8 +2248,15 @@
         apiResponse = await new Promise((resolve, reject) => {
           const port = chrome.runtime.connect({ name: 'chatStream' });
           let doneData = null;
+          const timeoutId = setTimeout(() => {
+            try {
+              port.disconnect();
+            } catch (e) {}
+            reject(new Error('流式请求超时，请稍后重试'));
+          }, 90000);
           port.onMessage.addListener(function onMsg(msg) {
             if (!msg.ok) {
+              clearTimeout(timeoutId);
               port.onMessage.removeListener(onMsg);
               try {
                 port.disconnect();
@@ -2130,6 +2265,7 @@
               return;
             }
             if (msg.finished) {
+              clearTimeout(timeoutId);
               port.onMessage.removeListener(onMsg);
               try {
                 port.disconnect();
@@ -2149,6 +2285,7 @@
               doneData = ev.data;
             }
             if (ev.event === 'error') {
+              clearTimeout(timeoutId);
               port.onMessage.removeListener(onMsg);
               try {
                 port.disconnect();
@@ -2178,6 +2315,10 @@
           }, (response) => {
             if (chrome.runtime.lastError) {
               reject(new Error(chrome.runtime.lastError.message));
+              return;
+            }
+            if (!response || typeof response !== 'object') {
+              reject(new Error('API返回空响应'));
               return;
             }
             if (response.success) {
@@ -2557,6 +2698,7 @@
           body: requestData
         }, (res) => {
           if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+          else if (!res || typeof res !== 'object') reject(new Error('API返回空响应'));
           else if (res.success) resolve(res.data);
           else reject(new Error(res.error || 'API请求失败'));
         });
@@ -2608,12 +2750,26 @@
   function getOrCreateSuggestionBox(scopeRoot = getDefaultScope()) {
     const scope = scopeRoot || getDefaultScope();
     const st = panelState(scope);
-    let box = scope.querySelector('.ai-suggestion-box');
+    const allBoxesInScope = Array.from(scope.querySelectorAll('.ai-suggestion-box'));
+    const hostBoxes = allBoxesInScope.filter((node) => resolveSuggestionBoxHostId(node, scope) === st.hostId);
+    let box = hostBoxes[0] || allBoxesInScope[0] || null;
+    if (hostBoxes.length > 1) {
+      const keeper = hostBoxes.find((node) => node.dataset.panelKey === st.panelKey) || hostBoxes[0];
+      hostBoxes.forEach((node) => {
+        if (node !== keeper && node.parentNode) {
+          node.parentNode.removeChild(node);
+        }
+      });
+      box = keeper;
+    }
 
     // 如果找到了隐藏的插件，重新显示它
     if (box && box.style.display === 'none') {
       box.style.display = 'block';
       box.dataset.panelKey = st.panelKey;
+      box.dataset.scopeHostId = st.hostId;
+      ensureSuggestionBoxLayoutResizeListener();
+      updateSuggestionBoxLayoutMode(box);
       return box;
     }
 
@@ -2789,6 +2945,9 @@
     }
     if (box) {
       box.dataset.panelKey = st.panelKey;
+      box.dataset.scopeHostId = st.hostId;
+      ensureSuggestionBoxLayoutResizeListener();
+      updateSuggestionBoxLayoutMode(box);
     }
     
     return box;
@@ -2861,6 +3020,10 @@
         }, (response) => {
           if (chrome.runtime.lastError) {
             reject(new Error(chrome.runtime.lastError.message));
+            return;
+          }
+          if (!response || typeof response !== 'object') {
+            reject(new Error('API返回空响应'));
             return;
           }
           if (response.success) {
@@ -3180,6 +3343,7 @@
       width: 100%;
       box-sizing: border-box;
       transition: all 0.3s ease;
+      overflow-x: hidden;
     }
 
     .ai-suggestion-box.minimized {
@@ -3237,6 +3401,41 @@
       width: 100%;
       min-width: 0;
       box-sizing: border-box;
+    }
+
+    .ai-suggestion-box.ai-compact .ai-layout-container {
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .ai-suggestion-box.ai-compact .ai-left-column,
+    .ai-suggestion-box.ai-compact .ai-center-column,
+    .ai-suggestion-box.ai-compact .ai-right-column {
+      flex: 1 1 auto;
+      max-width: 100%;
+      border-right: none;
+      padding-left: 0;
+      padding-right: 0;
+      border-bottom: 1px solid rgba(255,255,255,0.15);
+      padding-bottom: 16px;
+    }
+
+    .ai-suggestion-box.ai-compact .ai-right-column {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+
+    .ai-suggestion-box.ai-ultra-compact {
+      padding: 16px;
+      border-radius: 10px;
+    }
+
+    .ai-suggestion-box.ai-ultra-compact .ai-actions-row {
+      gap: 8px;
+    }
+
+    .ai-suggestion-box.ai-ultra-compact .ai-actions-row .ai-btn {
+      width: 100%;
     }
 
     /* 左 40% / 中 40% / 右 20%（flex 2:2:1） */
@@ -3584,27 +3783,6 @@
       to { transform: rotate(360deg); }
     }
 
-    @media (max-width: 900px) {
-      .ai-layout-container {
-        flex-direction: column;
-        gap: 20px;
-      }
-      .ai-left-column,
-      .ai-center-column,
-      .ai-right-column {
-        flex: 1 1 auto;
-        max-width: 100%;
-        border-right: none;
-        padding-left: 0;
-        padding-right: 0;
-        border-bottom: 1px solid rgba(255,255,255,0.15);
-        padding-bottom: 16px;
-      }
-      .ai-right-column {
-        border-bottom: none;
-        padding-bottom: 0;
-      }
-    }
   `;
   document.head.appendChild(style);
 

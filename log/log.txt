@@ -1,112 +1,299 @@
-2026-04-08 17:14:07,546 INFO work_reply_ai [rid=req-1775639647545-80b344 intent=suggestion ticket=182757610 sid=182757610]
-收到 /chat intent=suggestion ticket_id=182757610 session_id=182757610 agent_session_id=182757610:suggestion
+2026-04-10 09:35:25,020 INFO work_reply_ai [rid=req-1775784925020-bb6690 intent=summary ticket=182957368 sid=182957368]
+收到 /chat intent=summary ticket_id=182957368 session_id=182957368 agent_session_id=182957368:summary
 --------------------------------------------------------------------------------
-2026-04-08 17:14:07,546 INFO work_reply_ai [rid=req-1775639647545-80b344 intent=suggestion ticket=182757610 sid=182757610]
+2026-04-10 09:35:25,021 INFO work_reply_ai [rid=req-1775784925020-bb6690 intent=summary ticket=182957368 sid=182957368]
 [请求入参] /chat
-request_id: req-1775639647545-80b344
-intent: suggestion
-ticket_id: 182757610
-session_id: 182757610
-payload_size_bytes: 1001
-ChatRequest: {"intent": "suggestion", "session_id": "182757610", "works_info": {"title": "南网仅退款==未发货取消订单", "ticket_id": "182757610", "desc": "南网仅退款==未发货取消订单", "history": [{"index": 1, "summary": "今天 15:20回复了工单  回复内容：已反馈取消订单"}], "priority": null, "status": null}, "core_info": {"customer_name": "南方电网互联网服务有限公司", "project_name": "南方电网项目", "mall_name": "NFDW职工福利项目"}, "attention_info": {"project_attention": "1、投诉工单必须联系投诉人电话，联系不上再联系收货人； 2、投诉工单标题必须带TS； 3、完结工单时工单需要备注客户是否同意撤诉； 4、开发票，在线到可转平台客服处理；400接到，可反馈笔芬协助给南网老师对接客户开发票。", "supplier_attention": ""}, "query_info": {"query": "工单标题：南网仅退款==未发货取消订单\n工单描述：南网仅退款==未发货取消订单"}}
+request_id: req-1775784925020-bb6690
+intent: summary
+ticket_id: 182957368
+session_id: 182957368
+payload_size_bytes: 1163
+ChatRequest: {"intent": "summary", "session_id": "182957368", "works_info": {"title": "联友&云中鹤客服对接【订单后缀T&D==企微在线物流异常", "ticket_id": "182957368", "desc": "26040622555140177T，我在信赖商城下单了屏幕款支架银色。原本要将商品送到福建省漳州市漳浦县霞美镇白石村，但发现快递地址被写成送到赤土乡。希望你们跟快递沟通，把地址修正为福建省漳州市漳浦县霞美镇白石村", "history": [], "priority": "一般", "status": "受理中"}, "core_info": {"customer_name": "联友智连科技有限公司", "project_name": "东风联友项目", "mall_name": "东风本田API商城"}, "attention_info": {"project_attention": "", "supplier_attention": ""}, "query_info": {"query": "工单标题：联友&云中鹤客服对接【订单后缀T&D==企微在线物流异常\n工单描述：26040622555140177T，我在信赖商城下单了屏幕款支架银色。原本要将商品送到福建省漳州市漳浦县霞美镇白石村，但发现快递地址被写成送到赤土乡。希望你们跟快递沟通，把地址修正为福建省漳州市漳浦县霞美镇白石村"}}
 --------------------------------------------------------------------------------
-2026-04-08 17:14:08,182 INFO httpx [rid=req-1775639647545-80b344 intent=suggestion ticket=182757610 sid=182757610]
+2026-04-10 09:35:26,048 INFO httpx [rid=req-1775784925020-bb6690 intent=summary ticket=182957368 sid=182957368]
 HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/2 200 OK"
 --------------------------------------------------------------------------------
-2026-04-08 17:14:08,184 INFO rag_retrieval_tool [rid=req-1775639647545-80b344 intent=suggestion ticket=182757610 sid=182757610]
-获取 file_name 元数据
-包含内容: False
-包含字段: None
-文件过滤: None
+2026-04-10 09:35:26,050 INFO summary_rag_tools [rid=req-1775784925020-bb6690 intent=summary ticket=182957368 sid=182957368]
+[Zhuyishixiang] 获取元数据 | 过滤: None
 --------------------------------------------------------------------------------
-2026-04-08 17:14:08,184 INFO milvus_tool [rid=req-1775639647545-80b344 intent=suggestion ticket=182757610 sid=182757610]
-从缓存文件读取 174 个 file_name（集合：kefubuzhishiku1028ban_20251028155535）
+2026-04-10 09:35:26,050 INFO summary_rag_tools [rid=req-1775784925020-bb6690 intent=summary ticket=182957368 sid=182957368]
+[KefuShouhou] 检索开始
+查询: '物流异常 地址修正 处理流程'
+limit: 12
+过滤: None
 --------------------------------------------------------------------------------
-2026-04-08 17:14:08,184 INFO agent_service [rid=req-1775639647545-80b344 intent=suggestion ticket=182757610 sid=182757610]
-[知识库检索完成] list_knowledge_base_chunks_metadata
-参数：{'include_content': False, 'file_name_filters': None}
-摘要：{'unique_total_entities': 174, 'unique_file_name_count': 174, 'unique_file_name_preview': ['不可联系项目.md', '企微话术.md', '中信项目售前处理.md', '内-TCL售后服务.md', '内-东鹏项目售后处理.md', '外-融选（衡久盈）售后.md', '315投诉项目后台操作手册.md', 'TCL项目后台操作手册.md', '内-中信卡中心项目售后处理.md', '内-中信项目售后处理.md', '内-中原银行售后处理.md', '内-中国邮政物资供应平台项目售后处理.md', '内-交通银行售后处理.md', '内-兴业银行售后处理.md', '内-军网其他问题.md', '内-农行小豆其他问题.md', '内-华润项目售后处理.md', '内-南网质检标准.md', '内-唐山银行项目售后处理.md', '内-壹钱包工单质检标准.md']}
-耗时：0ms
+2026-04-10 09:35:26,051 INFO milvus_tool [rid=req-1775784925020-bb6690 intent=summary ticket=182957368 sid=182957368]
+从缓存文件读取 47 个 file_name（集合：kefushouhouxiangmuzhuyishixiang_20260313112954）
 --------------------------------------------------------------------------------
-2026-04-08 17:14:09,248 INFO httpx [rid=req-1775639647545-80b344 intent=suggestion ticket=182757610 sid=182757610]
-HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/2 200 OK"
---------------------------------------------------------------------------------
-2026-04-08 17:14:09,249 INFO rag_retrieval_tool [rid=req-1775639647545-80b344 intent=suggestion ticket=182757610 sid=182757610]
-检索开始
-查询: '未发货取消订单 仅退款 处理流程'
-限制: 12
-文件过滤: ["内-南网售后处理.md", "外-南网售后处理.md", "内-南网售中处理.md", "南网项目后台操作手册.md"]
---------------------------------------------------------------------------------
-2026-04-08 17:14:09,757 INFO httpx [rid=req-1775639647545-80b344 intent=suggestion ticket=182757610 sid=182757610]
+2026-04-10 09:35:26,767 INFO httpx [rid=req-1775784925020-bb6690 intent=summary ticket=182957368 sid=182957368]
 HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings "HTTP/1.1 200 OK"
 --------------------------------------------------------------------------------
-2026-04-08 17:14:09,776 INFO milvus_tool [rid=req-1775639647545-80b344 intent=suggestion ticket=182757610 sid=182757610]
+2026-04-10 09:35:26,785 INFO milvus_tool [rid=req-1775784925020-bb6690 intent=summary ticket=182957368 sid=182957368]
  [父子召回解析]
- 输入：12
- 输出：12
+ 输入：1
+ 输出：1
  child 替换：0
  去重跳过：0
  示例：[]
 --------------------------------------------------------------------------------
-2026-04-08 17:14:09,776 INFO milvus_tool [rid=req-1775639647545-80b344 intent=suggestion ticket=182757610 sid=182757610]
+2026-04-10 09:35:26,786 INFO milvus_tool [rid=req-1775784925020-bb6690 intent=summary ticket=182957368 sid=182957368]
  [父子召回完成]
  启用：True
- 召回前：总数=12 (child=0, parent=0)
- 召回后：总数=12 (parent=0)
+ 召回前：总数=1 (child=0, parent=0)
+ 召回后：总数=1 (parent=0)
 --------------------------------------------------------------------------------
-2026-04-08 17:14:09,776 INFO rag_retrieval_tool [rid=req-1775639647545-80b344 intent=suggestion ticket=182757610 sid=182757610]
-Milvus 检索完成
-策略: file_name过滤搜索
-条数: 12
-预览: [{'file_name': '内-南网售中处理.md', 'text_preview': '# 问题：取消订单流程是什么样的？'}, {'file_name': '内-南网售中处理.md', 'text_preview': '## 答案：\n1. 在线客户通知客服取消订单但未发起申请时，客服先通知相关采购暂缓发货，同步提醒客户在南网后台发起仅退款售后。\n2. 若客户24小时内未发起申请，客服可咨询客户或反馈平台老师核实是否需要退款。\n3. 客服在南网平台复核订单确认取消已退款，云台发起售后仅退款售后反馈采购审核。南网仅退款不会同步到云台，需在后台审核退款及云台取消订单。\n![图片](https://bigdata-static.yunzhonghe.com/static/20251029190840/word_image_000.png)  \n[  \n该表格展示了某系统中的“项目审批”页面，包含多个操作选项如“新增”、“编辑”、“删除”等，并标注了关键功能区域。页面中突出显示了“提交”按钮和“流程图”标签，提示用户可进行流程相关操作。该表格用于管理项目审批流程，支持用户对项目信息进行增删改查及状态更新。  \n]  \n![图片](https://bigdata-static.yunzhonghe.com/static/20251029190840/word_image_001.png)  \n[  \n该表格展示了订单取消的相关信息，包括退款金额为69.01元、退款数量为1、下单人手机号为138****0248以及操作人电话。  \n该表格记录了用户通过客服渠道申请取消订单的详细数据，涉及退款与联系信息。  \n]'}, {'file_name': '内-南网售中处理.md', 'text_preview': '# 问题：南网未发货取消订单操作流程是怎样的'}, {'file_name': '内-南网售中处理.md', 'text_preview': '# 问题：南网已发货取消订单操作流程是怎样的'}, {'file_name': '内-南网售后处理.md', 'text_preview': '# 问题：南网如果云台显示已发货，一般多久之后客户不能发起仅退款，只能发起退货退款'}, {'file_name': '内-南网售后处理.md', 'text_preview': '# 问题：退货退款同意后，客户一直不退怎么办？'}, {'file_name': '内-南网售后处理.md', 'text_preview': '# 问题：南网客服自己发起仅退款会不会生成云台售后单？'}, {'file_name': '南网项目后台操作手册.md', 'text_preview': '### 商家售后管理—福利售后单据—福利商家退款单（仅退款，退货）\n![图片](https://bigdata-static.yunzhonghe.com/static/20251029192900/word_image_002.png)  \n[\n| 序号 | VIP用户 | 拦截状态 | 退款单号 | 订单标签 | 是否食堂支付 | 订单号 | 商家订单号 | 商品名称 | 操作 |\n|------|--------|----------|----------|----------|--------------|--------|------------|----------|------|\n| 1    | 是     |          | T4740547348862106771 | 系统内单位 | 否           | 47405473487422706737 | PO101865667497492889641 | 佰斯的特柔衣领果530g(单位：罐) | 编辑 |\n| 2    | 否     |          | T47405473488821151588 | 系统内单位 | 否           | 47405473487522660726 | PO10193788757348291241 | lena 32mm加长懒人启动卷发棒 LN-Z3S星黛... | 编辑 |\n该表格展示了两条未处理完毕的售后退款记录，退款状态为“等待卖家同意”，涉及商品包括佰斯的特柔衣领果和lena卷发棒，均需卖家进一步操作。\n]'}, {'file_name': '内-南网售后处理.md', 'text_preview': '# 问题：南网食堂订单售后如何处理？（退款、取消）'}, {'file_name': '内-南网售中处理.md', 'text_preview': '## 答案：\n1. 客户在南网后台发起售后是未发货取消订单，但云台已发货或供应商已认领发货且单号未回传南网后台时，南网后台需及时给客户退款，客服跟进供应商拦截以及云台做退。\n2. 若云台和南网后台都已发货，则按正常拦截售后流程处理。如客户催得急，在有退回物流记录后，可先在后台审核退款；若不着急，则正常按拦截给客户退款。\n![图片](https://bigdata-static.yunzhonghe.com/static/20251029190840/word_image_002.png)  \n[  \n该页面为一个系统管理界面，显示了设备信息和配置详情，包含设备名称、型号、序列号、IP地址等字段。左侧菜单栏提供了多个功能选项，如“设备管理”、“系统设置”等。右上角有“保存”和“取消”按钮，用于提交或放弃当前操作。  \n]'}, {'file_name': '内-南网售后处理.md', 'text_preview': '## 答案：\n退货同意之后，需要跟进客户退货单号，如果客户随便上传了一个单号物流显示签收的，后台就会自动给客户退款，容易造成订单退款商品未退回\n---'}, {'file_name': '内-南网售后处理.md', 'text_preview': '## 答案：\n1. 检查订单状态：是否结算（是），食堂支付（是），是否食堂食材（是），确认收货时间（超七天），任意一个条件都无法发起退货退款\n2. 符合条件的，引导客户后台发起退货退款并提醒客户要及时上传退货快递单号，避免超时售后关闭。\n3. 不符合条件无法申请的，正常沟通换货，不要跟客户起冲突，如果正常沟通无法解决，沟通更换替换款方案\n如因个人原因没有按流程引导客户操作的，后果追责到相关人员\n---'}]
+2026-04-10 09:35:26,786 INFO summary_rag_tools [rid=req-1775784925020-bb6690 intent=summary ticket=182957368 sid=182957368]
+[KefuShouhou] Milvus 完成 | 策略: 全量兜底 | 条数: 1
 --------------------------------------------------------------------------------
-2026-04-08 17:14:09,777 INFO agent_service [rid=req-1775639647545-80b344 intent=suggestion ticket=182757610 sid=182757610]
-[知识库检索完成] search_knowledge_base
-查询：'未发货取消订单 仅退款 处理流程'
-限制：12
-文件过滤：["内-南网售后处理.md", "外-南网售后处理.md", "内-南网售中处理.md", "南网项目后台操作手册.md"]
-返回条数：12
-耗时：527ms
---------------------------------------------------------------------------------
-2026-04-08 17:14:10,914 INFO httpx [rid=req-1775639647545-80b344 intent=suggestion ticket=182757610 sid=182757610]
+2026-04-10 09:35:28,013 INFO httpx [rid=req-1775784925020-bb6690 intent=summary ticket=182957368 sid=182957368]
 HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/2 200 OK"
 --------------------------------------------------------------------------------
-2026-04-08 17:14:12,128 INFO httpx [rid=req-1775639647545-80b344 intent=suggestion ticket=182757610 sid=182757610]
+2026-04-10 09:35:28,015 INFO summary_rag_tools [rid=req-1775784925020-bb6690 intent=summary ticket=182957368 sid=182957368]
+[Zhuyishixiang] 检索开始
+查询: '物流异常 地址修正 处理规范'
+limit: 10
+过滤: ["东风本田项目注意事项.md"]
+--------------------------------------------------------------------------------
+2026-04-10 09:35:28,694 INFO httpx [rid=req-1775784925020-bb6690 intent=summary ticket=182957368 sid=182957368]
+HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings "HTTP/1.1 200 OK"
+--------------------------------------------------------------------------------
+2026-04-10 09:35:28,715 INFO milvus_tool [rid=req-1775784925020-bb6690 intent=summary ticket=182957368 sid=182957368]
+ [父子召回解析]
+ 输入：1
+ 输出：1
+ child 替换：0
+ 去重跳过：0
+ 示例：[]
+--------------------------------------------------------------------------------
+2026-04-10 09:35:28,715 INFO milvus_tool [rid=req-1775784925020-bb6690 intent=summary ticket=182957368 sid=182957368]
+ [父子召回完成]
+ 启用：True
+ 召回前：总数=1 (child=0, parent=0)
+ 召回后：总数=1 (parent=0)
+--------------------------------------------------------------------------------
+2026-04-10 09:35:28,715 INFO summary_rag_tools [rid=req-1775784925020-bb6690 intent=summary ticket=182957368 sid=182957368]
+[Zhuyishixiang] Milvus 完成 | 策略: file_name过滤搜索 | 条数: 1
+--------------------------------------------------------------------------------
+2026-04-10 09:35:31,793 INFO httpx [rid=req-1775784925020-bb6690 intent=summary ticket=182957368 sid=182957368]
+HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/2 200 OK"
+--------------------------------------------------------------------------------
+2026-04-10 09:35:32,974 INFO httpx [rid=req-1775784925020-bb6690 intent=summary ticket=182957368 sid=182957368]
 HTTP Request: POST https://os-api.agno.com/telemetry/runs "HTTP/2 201 Created"
 --------------------------------------------------------------------------------
-2026-04-08 17:14:12,129 INFO agent_service [rid=req-1775639647545-80b344 intent=suggestion ticket=182757610 sid=182757610]
+2026-04-10 09:35:32,975 INFO agent_service [rid=req-1775784925020-bb6690 intent=summary ticket=182957368 sid=182957368]
 [Agent工具决策审计]
-可用工具数: 2
-可用工具: ['knowledge_retrieval_toolkit.search_knowledge_base', 'knowledge_retrieval_toolkit.list_knowledge_base_chunks_metadata']
-实际调用次数: 4
-实际调用工具: {'knowledge_retrieval_toolkit.list_knowledge_base_chunks_metadata': 2, 'knowledge_retrieval_toolkit.search_knowledge_base': 2}
+可用工具数: 3
+可用工具: ['kefu_shouhou_toolkit.search_kefu_shouhou_knowledge', 'zhuyishixiang_toolkit.list_zhuyishixiang_file_names', 'zhuyishixiang_toolkit.search_zhuyishixiang_knowledge']
+实际调用次数: 6
+实际调用工具: {'zhuyishixiang_toolkit.list_zhuyishixiang_file_names': 2, 'kefu_shouhou_toolkit.search_kefu_shouhou_knowledge': 2, 'zhuyishixiang_toolkit.search_zhuyishixiang_knowledge': 2}
 未调用原因标签: tools_called
 --------------------------------------------------------------------------------
-2026-04-08 17:14:12,134 INFO work_reply_ai [rid=req-1775639647545-80b344 intent=suggestion ticket=182757610 sid=182757610]
+2026-04-10 09:35:32,981 INFO work_reply_ai [rid=req-1775784925020-bb6690 intent=summary ticket=182957368 sid=182957368]
 [请求完成] /chat
-intent: suggestion
-总耗时: 4587ms
+intent: summary
+总耗时: 7960ms
 LLM调用: 3
-Embedding调用: 1
+Embedding调用: 2
 Telemetry调用: 1
-命中来源文件数: 3
-最终sources数: 3
-工具可用数: 2
-工具调用次数: 4
-工具调用详情: {'knowledge_retrieval_toolkit.list_knowledge_base_chunks_metadata': 2, 'knowledge_retrieval_toolkit.search_knowledge_base': 2}
+命中来源文件数: 2
+最终sources数: 2
+工具可用数: 3
+工具调用次数: 6
+工具调用详情: {'zhuyishixiang_toolkit.list_zhuyishixiang_file_names': 2, 'kefu_shouhou_toolkit.search_kefu_shouhou_knowledge': 2, 'zhuyishixiang_toolkit.search_zhuyishixiang_knowledge': 2}
 未调用原因标签: tools_called
 fallback_used: False
 --------------------------------------------------------------------------------
-2026-04-08 17:14:12,134 INFO work_reply_ai [rid=req-1775639647545-80b344 intent=suggestion ticket=182757610 sid=182757610]
+2026-04-10 09:35:32,982 INFO work_reply_ai [rid=req-1775784925020-bb6690 intent=summary ticket=182957368 sid=182957368]
 HTTP请求完成
 方法: POST
 路径: /cs_assist_ai/chat
 状态码: 200
-耗时: 4.589s
+耗时: 7.962s
 LLM调用: 3
-Embedding调用: 1
+Embedding调用: 2
 Telemetry调用: 1
 --------------------------------------------------------------------------------
-2026-04-08 17:14:12,134 INFO uvicorn.access [rid=- intent=- ticket=- sid=-]
-172.16.64.105:40122 - "POST /cs_assist_ai/chat HTTP/1.0" 200
+2026-04-10 09:35:32,982 INFO uvicorn.access [rid=- intent=- ticket=- sid=-]
+172.16.64.105:49188 - "POST /cs_assist_ai/chat HTTP/1.0" 200
+--------------------------------------------------------------------------------
+2026-04-10 09:38:14,861 INFO work_reply_ai [rid=req-1775785094861-d15745 intent=summary ticket=182882662 sid=182882662]
+收到 /chat intent=summary ticket_id=182882662 session_id=182882662 agent_session_id=182882662:summary
+--------------------------------------------------------------------------------
+2026-04-10 09:38:14,862 INFO work_reply_ai [rid=req-1775785094861-d15745 intent=summary ticket=182882662 sid=182882662]
+[请求入参] /chat
+request_id: req-1775785094861-d15745
+intent: summary
+ticket_id: 182882662
+session_id: 182882662
+payload_size_bytes: 1218
+ChatRequest: {"intent": "summary", "session_id": "182882662", "works_info": {"title": "荣数后台：已发货取消订单", "ticket_id": "182882662", "desc": "德世朗（DESLON） 蒸蒸日上 3层 26cm 蒸蒸日上蒸锅 不锈钢色（单位：个）26040810122994496==TP26040810122580468子单", "history": [{"index": 1, "summary": "昨天 16:14回复了工单  回复内容：9483458918506已反馈拦截，后台已退款"}], "priority": "一般", "status": "受理中"}, "core_info": {"customer_name": "上海荣数信息技术有限公司（SC）", "project_name": "荣数商城项目", "mall_name": "上海荣数信息技术有限公司商城"}, "attention_info": {"project_attention": "1.未发货订单云台查不到要取消的，告知罗丽君，不可直接发外部群让老师发起退款； 2.除河北银行的订单可以修改地址，其他荣数修改地址订单告知联系银行，银行会反馈我司修改，我们没有权限修改。", "supplier_attention": ""}, "query_info": {"query": "工单标题：荣数后台：已发货取消订单\n工单描述：德世朗（DESLON） 蒸蒸日上 3层 26cm 蒸蒸日上蒸锅 不锈钢色（单位：个）26040810122994496==TP26040810122580468子单"}}
+--------------------------------------------------------------------------------
+2026-04-10 09:38:16,160 INFO httpx [rid=req-1775785094861-d15745 intent=summary ticket=182882662 sid=182882662]
+HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/2 200 OK"
+--------------------------------------------------------------------------------
+2026-04-10 09:38:16,162 INFO summary_rag_tools [rid=req-1775785094861-d15745 intent=summary ticket=182882662 sid=182882662]
+[Zhuyishixiang] 获取元数据 | 过滤: None
+--------------------------------------------------------------------------------
+2026-04-10 09:38:16,162 INFO summary_rag_tools [rid=req-1775785094861-d15745 intent=summary ticket=182882662 sid=182882662]
+[KefuShouhou] 检索开始
+查询: '已发货取消订单 退款流程'
+limit: 10
+过滤: None
+--------------------------------------------------------------------------------
+2026-04-10 09:38:16,163 INFO milvus_tool [rid=req-1775785094861-d15745 intent=summary ticket=182882662 sid=182882662]
+从缓存文件读取 47 个 file_name（集合：kefushouhouxiangmuzhuyishixiang_20260313112954）
+--------------------------------------------------------------------------------
+2026-04-10 09:38:16,628 INFO httpx [rid=req-1775785094861-d15745 intent=summary ticket=182882662 sid=182882662]
+HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings "HTTP/1.1 200 OK"
+--------------------------------------------------------------------------------
+2026-04-10 09:38:16,645 INFO milvus_tool [rid=req-1775785094861-d15745 intent=summary ticket=182882662 sid=182882662]
+ [父子召回解析]
+ 输入：1
+ 输出：1
+ child 替换：0
+ 去重跳过：0
+ 示例：[]
+--------------------------------------------------------------------------------
+2026-04-10 09:38:16,645 INFO milvus_tool [rid=req-1775785094861-d15745 intent=summary ticket=182882662 sid=182882662]
+ [父子召回完成]
+ 启用：True
+ 召回前：总数=1 (child=0, parent=0)
+ 召回后：总数=1 (parent=0)
+--------------------------------------------------------------------------------
+2026-04-10 09:38:16,645 INFO summary_rag_tools [rid=req-1775785094861-d15745 intent=summary ticket=182882662 sid=182882662]
+[KefuShouhou] Milvus 完成 | 策略: 全量兜底 | 条数: 1
+--------------------------------------------------------------------------------
+2026-04-10 09:38:18,284 INFO httpx [rid=req-1775785094861-d15745 intent=summary ticket=182882662 sid=182882662]
+HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/2 200 OK"
+--------------------------------------------------------------------------------
+2026-04-10 09:38:18,286 INFO summary_rag_tools [rid=req-1775785094861-d15745 intent=summary ticket=182882662 sid=182882662]
+[Zhuyishixiang] 检索开始
+查询: '已发货取消订单 退款处理规范'
+limit: 10
+过滤: ["SCYH积分商城注意事项.md"]
+--------------------------------------------------------------------------------
+2026-04-10 09:38:18,625 INFO httpx [rid=req-1775785094861-d15745 intent=summary ticket=182882662 sid=182882662]
+HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings "HTTP/1.1 200 OK"
+--------------------------------------------------------------------------------
+2026-04-10 09:38:18,643 INFO milvus_tool [rid=req-1775785094861-d15745 intent=summary ticket=182882662 sid=182882662]
+ [父子召回解析]
+ 输入：1
+ 输出：1
+ child 替换：0
+ 去重跳过：0
+ 示例：[]
+--------------------------------------------------------------------------------
+2026-04-10 09:38:18,643 INFO milvus_tool [rid=req-1775785094861-d15745 intent=summary ticket=182882662 sid=182882662]
+ [父子召回完成]
+ 启用：True
+ 召回前：总数=1 (child=0, parent=0)
+ 召回后：总数=1 (parent=0)
+--------------------------------------------------------------------------------
+2026-04-10 09:38:18,643 INFO summary_rag_tools [rid=req-1775785094861-d15745 intent=summary ticket=182882662 sid=182882662]
+[Zhuyishixiang] Milvus 完成 | 策略: file_name过滤搜索 | 条数: 1
+--------------------------------------------------------------------------------
+2026-04-10 09:38:20,631 INFO httpx [rid=req-1775785094861-d15745 intent=summary ticket=182882662 sid=182882662]
+HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/2 200 OK"
+--------------------------------------------------------------------------------
+2026-04-10 09:38:21,793 INFO httpx [rid=req-1775785094861-d15745 intent=summary ticket=182882662 sid=182882662]
+HTTP Request: POST https://os-api.agno.com/telemetry/runs "HTTP/2 201 Created"
+--------------------------------------------------------------------------------
+2026-04-10 09:38:21,794 INFO agent_service [rid=req-1775785094861-d15745 intent=summary ticket=182882662 sid=182882662]
+[Agent工具决策审计]
+可用工具数: 3
+可用工具: ['kefu_shouhou_toolkit.search_kefu_shouhou_knowledge', 'zhuyishixiang_toolkit.list_zhuyishixiang_file_names', 'zhuyishixiang_toolkit.search_zhuyishixiang_knowledge']
+实际调用次数: 6
+实际调用工具: {'zhuyishixiang_toolkit.list_zhuyishixiang_file_names': 2, 'kefu_shouhou_toolkit.search_kefu_shouhou_knowledge': 2, 'zhuyishixiang_toolkit.search_zhuyishixiang_knowledge': 2}
+未调用原因标签: tools_called
+--------------------------------------------------------------------------------
+2026-04-10 09:38:21,800 INFO work_reply_ai [rid=req-1775785094861-d15745 intent=summary ticket=182882662 sid=182882662]
+[请求完成] /chat
+intent: summary
+总耗时: 6938ms
+LLM调用: 3
+Embedding调用: 2
+Telemetry调用: 1
+命中来源文件数: 2
+最终sources数: 2
+工具可用数: 3
+工具调用次数: 6
+工具调用详情: {'zhuyishixiang_toolkit.list_zhuyishixiang_file_names': 2, 'kefu_shouhou_toolkit.search_kefu_shouhou_knowledge': 2, 'zhuyishixiang_toolkit.search_zhuyishixiang_knowledge': 2}
+未调用原因标签: tools_called
+fallback_used: False
+--------------------------------------------------------------------------------
+2026-04-10 09:38:21,800 INFO work_reply_ai [rid=req-1775785094861-d15745 intent=summary ticket=182882662 sid=182882662]
+HTTP请求完成
+方法: POST
+路径: /cs_assist_ai/chat
+状态码: 200
+耗时: 6.939s
+LLM调用: 3
+Embedding调用: 2
+Telemetry调用: 1
+--------------------------------------------------------------------------------
+2026-04-10 09:38:21,800 INFO uvicorn.access [rid=- intent=- ticket=- sid=-]
+172.16.64.105:58002 - "POST /cs_assist_ai/chat HTTP/1.0" 200
+--------------------------------------------------------------------------------
+2026-04-10 10:09:16,827 INFO config_loader [rid=- intent=- ticket=- sid=-]
+成功加载配置文件: C:\Users\GX\Desktop\work_reply_ai\config\config.json
+--------------------------------------------------------------------------------
+2026-04-10 10:09:16,830 INFO scripts.cache_file_name [rid=- intent=- ticket=- sid=-]
+[主库 milvus] 已删除旧缓存以强制回源: C:\Users\GX\Desktop\work_reply_ai\config\cache_kefubuzhishiku1028ban_20251028155535.json
+--------------------------------------------------------------------------------
+2026-04-10 10:09:16,956 INFO milvus_tool [rid=- intent=- ticket=- sid=-]
+[MilvusSearchTool] 集合：kefubuzhishiku1028ban_20251028155535  缓存文件：C:\Users\GX\Desktop\work_reply_ai\tools\..\config\cache_kefubuzhishiku1028ban_20251028155535.json
+--------------------------------------------------------------------------------
+2026-04-10 10:09:17,158 INFO config_loader [rid=- intent=- ticket=- sid=-]
+成功加载配置文件: C:\Users\GX\Desktop\work_reply_ai\config\config.json
+--------------------------------------------------------------------------------
+2026-04-10 10:09:17,235 INFO milvus_tool [rid=- intent=- ticket=- sid=-]
+[MilvusSearchTool] 集合：kefubuzhishiku1028ban_20251028155535  缓存文件：C:\Users\GX\Desktop\work_reply_ai\tools\..\config\cache_kefubuzhishiku1028ban_20251028155535.json
+--------------------------------------------------------------------------------
+2026-04-10 10:09:17,751 INFO milvus_tool [rid=- intent=- ticket=- sid=-]
+从 Milvus 查询返回 174 个file_name文件名
+--------------------------------------------------------------------------------
+2026-04-10 10:09:17,752 INFO milvus_tool [rid=- intent=- ticket=- sid=-]
+ 已写入缓存文件：C:\Users\GX\Desktop\work_reply_ai\tools\..\config\cache_kefubuzhishiku1028ban_20251028155535.json（174 条）
+--------------------------------------------------------------------------------
+2026-04-10 10:09:17,752 INFO scripts.cache_file_name [rid=- intent=- ticket=- sid=-]
+[主库 milvus] 缓存已更新: C:\Users\GX\Desktop\work_reply_ai\config\cache_kefubuzhishiku1028ban_20251028155535.json（unique_total_entities=174）
+--------------------------------------------------------------------------------
+2026-04-10 10:09:17,758 INFO scripts.cache_file_name [rid=- intent=- ticket=- sid=-]
+[注意事项 milvus_zhuyishixiang] 已删除旧缓存以强制回源: C:\Users\GX\Desktop\work_reply_ai\config\cache_kefushouhouxiangmuzhuyishixiang_20260313112954.json
+--------------------------------------------------------------------------------
+2026-04-10 10:09:17,783 INFO milvus_tool [rid=- intent=- ticket=- sid=-]
+[MilvusSearchTool] 集合：kefushouhouxiangmuzhuyishixiang_20260313112954  缓存文件：C:\Users\GX\Desktop\work_reply_ai\tools\..\config\cache_kefushouhouxiangmuzhuyishixiang_20260313112954.json
+--------------------------------------------------------------------------------
+2026-04-10 10:09:17,986 INFO milvus_tool [rid=- intent=- ticket=- sid=-]
+从 Milvus 查询返回 80 个file_name文件名
+--------------------------------------------------------------------------------
+2026-04-10 10:09:17,987 INFO milvus_tool [rid=- intent=- ticket=- sid=-]
+ 已写入缓存文件：C:\Users\GX\Desktop\work_reply_ai\tools\..\config\cache_kefushouhouxiangmuzhuyishixiang_20260313112954.json（80 条）
+--------------------------------------------------------------------------------
+2026-04-10 10:09:17,987 INFO scripts.cache_file_name [rid=- intent=- ticket=- sid=-]
+[注意事项 milvus_zhuyishixiang] 缓存已更新: C:\Users\GX\Desktop\work_reply_ai\config\cache_kefushouhouxiangmuzhuyishixiang_20260313112954.json（unique_total_entities=80）
+--------------------------------------------------------------------------------
+2026-04-10 10:09:18,028 INFO milvus_tool [rid=- intent=- ticket=- sid=-]
+从 Milvus 查询返回 174 个file_name文件名
+--------------------------------------------------------------------------------
+2026-04-10 10:09:18,030 INFO milvus_tool [rid=- intent=- ticket=- sid=-]
+ 已写入缓存文件：C:\Users\GX\Desktop\work_reply_ai\tools\..\config\cache_kefubuzhishiku1028ban_20251028155535.json（174 条）
+--------------------------------------------------------------------------------
+2026-04-10 10:09:18,030 INFO scripts.cache_file_name [rid=- intent=- ticket=- sid=-]
+[主库 milvus] 缓存已更新: C:\Users\GX\Desktop\work_reply_ai\config\cache_kefubuzhishiku1028ban_20251028155535.json（unique_total_entities=174）
+--------------------------------------------------------------------------------
+2026-04-10 10:09:18,035 INFO scripts.cache_file_name [rid=- intent=- ticket=- sid=-]
+[注意事项 milvus_zhuyishixiang] 已删除旧缓存以强制回源: C:\Users\GX\Desktop\work_reply_ai\config\cache_kefushouhouxiangmuzhuyishixiang_20260313112954.json
+--------------------------------------------------------------------------------
+2026-04-10 10:09:18,059 INFO milvus_tool [rid=- intent=- ticket=- sid=-]
+[MilvusSearchTool] 集合：kefushouhouxiangmuzhuyishixiang_20260313112954  缓存文件：C:\Users\GX\Desktop\work_reply_ai\tools\..\config\cache_kefushouhouxiangmuzhuyishixiang_20260313112954.json
+--------------------------------------------------------------------------------
+2026-04-10 10:09:18,544 INFO milvus_tool [rid=- intent=- ticket=- sid=-]
+从 Milvus 查询返回 80 个file_name文件名
+--------------------------------------------------------------------------------
+2026-04-10 10:09:18,545 INFO milvus_tool [rid=- intent=- ticket=- sid=-]
+ 已写入缓存文件：C:\Users\GX\Desktop\work_reply_ai\tools\..\config\cache_kefushouhouxiangmuzhuyishixiang_20260313112954.json（80 条）
+--------------------------------------------------------------------------------
+2026-04-10 10:09:18,545 INFO scripts.cache_file_name [rid=- intent=- ticket=- sid=-]
+[注意事项 milvus_zhuyishixiang] 缓存已更新: C:\Users\GX\Desktop\work_reply_ai\config\cache_kefushouhouxiangmuzhuyishixiang_20260313112954.json（unique_total_entities=80）
 --------------------------------------------------------------------------------
