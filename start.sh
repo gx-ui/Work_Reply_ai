@@ -109,6 +109,15 @@ install_deps() {
 run_uvicorn() {
   activate_conda_env
   ensure_config
+
+  # 刷新 Milvus 缓存
+  echo "[start.sh] 刷新 Milvus 缓存..."
+  if python "$ROOT/scripts/cache_file_name.py"; then
+    echo "[start.sh] Milvus 缓存刷新成功"
+  else
+    echo "[start.sh] 警告: Milvus 缓存刷新失败，将继续启动" >&2
+  fi
+
   local -a extra=()
   if [[ "$RELOAD" == "1" ]]; then
     extra+=(--reload)
@@ -143,6 +152,14 @@ run_uvicorn_daemon() {
       die "进程已在运行 pid=$oldpid（日志: $LOG_FILE）。停止请执行: $0 --stop"
     fi
     rm -f "$PID_FILE"
+  fi
+
+  # 刷新 Milvus 缓存
+  echo "[start.sh] 刷新 Milvus 缓存..."
+  if python "$ROOT/scripts/cache_file_name.py"; then
+    echo "[start.sh] Milvus 缓存刷新成功"
+  else
+    echo "[start.sh] 警告: Milvus 缓存刷新失败，将继续启动" >&2
   fi
 
   local -a extra=()

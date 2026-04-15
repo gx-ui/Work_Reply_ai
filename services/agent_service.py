@@ -575,17 +575,31 @@ async def agent_run(
         called_tools,
         available_tools=available_tools,
     )
+    tool_histogram = audit.get("called_tool_histogram", {})
+    duplicates = {tool: count for tool, count in tool_histogram.items() if count > 1}
+
     logger.info(
         "[Agent工具决策审计]\n"
         "可用工具数: %s\n"
         "可用工具: %s\n"
         "实际调用次数: %s\n"
         "实际调用工具: %s\n"
+        "工具调用详情: %s\n"
         "未调用原因标签: %s",
         len(available_tools),
         available_tools,
         audit.get("called_tool_count"),
         audit.get("called_tool_histogram"),
+        get_tool_invocations(),  # 显示完整的工具调用序列
         audit.get("no_tool_reason"),
     )
+
+    if duplicates:
+        logger.warning(
+            "[Agent告警] 检测到重复工具调用: %s\n"
+            "可能导致: 成本增加、响应变慢、结果不一致\n"
+            "建议: 检查提示词是否明确要求每个工具只需调用一次",
+            duplicates,
+        )
+
     return text, kb, audit

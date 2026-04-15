@@ -40,18 +40,121 @@ class SummaryRetrievalCore:
         self.tool_name = tool_name
         self.source_bucket = str(source_bucket or "").strip().lower() or None
 
+    def _calculate_relevance_score(
+        self,
+        query: str,
+        items: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """
+        计算 RAG 检索结果的相关性评分。
+
+        评分维度：
+        1. Query 关键词覆盖率（0-40分）
+        2. 文件名相关性（0-30分）
+        3. 结果文本关键词密度（0-30分）
+
+        Returns:
+            Dict: {
+                "total_score": 总分,
+                "max_score": 满分,
+                "query_keywords": 提取的关键词列表,
+                "details": 各维度得分详情
+            }
+        """
+        import re
+        from collections import Counter
+
+        # 提取 query 中的关键词（中文、英文、数字）
+        query_keywords = re.findall(r'[\u4e00-\u9fff]+|[a-zA-Z]+|\d+', query.lower())
+        query_keywords = [kw for kw in query_keywords if len(kw) >= 2]  # 过滤单字
+
+        # 如果没有关键词，返回默认分数
+        if not query_keywords:
+            return {
+                "total_score": 0.0,
+                "max_score": 100.0,
+                "query_keywords": [],
+                "details": {"reason": "no_keywords_extracted"},
+            }
+
+        scores = {
+            "keyword_coverage": 0.0,  # 关键词覆盖率
+            "filename_relevance": 0.0,  # 文件名相关性
+            "text_density": 0.0,  # 文本关键词密度
+        }
+
+        # 1. 关键词覆盖率（最多40分）
+        covered_keywords = set()
+        for item in items:
+            text = str(item.get("text", "")).lower()
+            file_name = str(item.get("file_name", "")).lower()
+            combined = text + " " + file_name
+            for kw in query_keywords:
+                if kw in combined:
+                    covered_keywords.add(kw)
+
+        coverage_ratio = len(covered_keywords) / len(query_keywords) if query_keywords else 0
+        scores["keyword_coverage"] = min(40.0, coverage_ratio * 40)
+
+        # 2. 文件名相关性（最多30分）
+        filename_scores = []
+        for item in items:
+            file_name = str(item.get("file_name", "")).lower()
+            kw_matches = sum(1 for kw in query_keywords if kw in file_name)
+            filename_scores.append(kw_matches)
+
+        if filename_scores:
+            avg_filename_match = sum(filename_scores) / len(filename_scores)
+            scores["filename_relevance"] = min(30.0, avg_filename_match * 10)
+
+        # 3. 文本关键词密度（最多30分）
+        text_scores = []
+        for item in items:
+            text = str(item.get("text", "")).lower()
+            total_matches = sum(1 for kw in query_keywords if kw in text)
+            text_scores.append(total_matches)
+
+        if text_scores:
+            avg_text_density = sum(text_scores) / len(text_scores)
+            scores["text_density"] = min(30.0, avg_text_density * 3)
+
+        total_score = sum(scores.values())
+
+        return {
+            "total_score": round(total_score, 2),
+            "max_score": 100.0,
+            "query_keywords": query_keywords,
+            "details": scores,
+        }
+
     def search(
         self,
         query: str,
         limit: Optional[int] = None,
         file_name_filters: Optional[Union[str, List[str]]] = None,
+        allow_fallback: bool = True,
     ) -> Union[List[Dict[str, Any]], str]:
+        """
+        检索知识库内容。
+
+        Args:
+            query: 检索查询
+            limit: 返回结果数量限制
+            file_name_filters: 文件名过滤条件
+            allow_fallback: 是否允许全量兜底（默认True）。
+                           False时，过滤无结果直接返回空，不执行全量搜索。
+                           用于注意事项库，避免返回不相关项目的内容。
+
+        Returns:
+            检索结果列表或错误信息字符串
+        """
         logger.info(
-            "[%s] 检索开始\n查询: %r\nlimit: %s\n过滤: %s",
+            "[%s] 检索开始\n查询: %r\nlimit: %s\n过滤: %s\n允许兜底: %s",
             self.tool_name,
             query,
             limit,
             file_name_filters,
+            allow_fallback,
         )
         items: List[Dict[str, Any]] = []
         strategy = "未知"
@@ -62,9 +165,15 @@ class SummaryRetrievalCore:
                 strategy = "file_name过滤搜索"
                 rows = self.milvus_tool.search_with_metadata(query=query, limit=limit, filter_str=file_name_filters)
                 if not rows:
-                    logger.info("[%s] 过滤无结果，降级全量兜底", self.tool_name)
+                    if allow_fallback:
+                        logger.info("[%s] 过滤无结果，降级全量兜底", self.tool_name)
+                        strategy = "全量兜底"
+                        rows = self.milvus_tool.search_with_metadata(query=query, limit=limit, filter_str=None)
+                    else:
+                        logger.info("[%s] 过滤无结果，不执行全量兜底（allow_fallback=False）", self.tool_name)
+                        return []  # 直接返回空列表
             if not rows:
-                strategy = "全量兜底"
+                strategy = "全量搜索"
                 rows = self.milvus_tool.search_with_metadata(query=query, limit=limit, filter_str=None)
             for r in rows or []:
                 if not isinstance(r, dict):
@@ -87,6 +196,32 @@ class SummaryRetrievalCore:
                     items.append({"file_name": "", "text": text})
 
         logger.info("[%s] Milvus 完成 | 策略: %s | 条数: %s", self.tool_name, strategy, len(items))
+
+        # RAG 质量监控：相关性评分
+        quality_score = self._calculate_relevance_score(query, items)
+        logger.info(
+            "[%s] RAG质量监控 | 相关性评分: %.2f/%.2f | Query关键词: %s | 结果文件名: %s",
+            self.tool_name,
+            quality_score["total_score"],
+            quality_score["max_score"],
+            quality_score["query_keywords"],
+            [item.get("file_name", "unknown") for item in items[:3]],
+        )
+
+        # 低分告警
+        if quality_score["total_score"] < 30:
+            logger.warning(
+                "[%s] RAG质量告警 | 相关性评分过低: %.2f/%.2f | 可能导致结果不准确\n"
+                "建议: 检查知识库中是否有相关文档，或调整 Query 关键词\n"
+                "Query: %s\n"
+                "返回文件: %s",
+                self.tool_name,
+                quality_score["total_score"],
+                quality_score["max_score"],
+                query,
+                [item.get("file_name", "unknown") for item in items[:5]],
+            )
+
         if not items:
             return "未找到相关结果"
         try:
@@ -108,10 +243,25 @@ class SummaryRetrievalCore:
         query: str,
         limit: Optional[int] = None,
         file_name_filters: Optional[Union[str, List[str]]] = None,
+        allow_fallback: bool = True,
     ) -> str:
-        result = self.search(query, limit, file_name_filters=file_name_filters)
+        """
+        检索知识库并返回格式化字符串。
+
+        Args:
+            query: 检索查询
+            limit: 返回结果数量限制
+            file_name_filters: 文件名过滤条件
+            allow_fallback: 是否允许全量兜底（默认True）
+        """
+        result = self.search(query, limit, file_name_filters=file_name_filters, allow_fallback=allow_fallback)
         if isinstance(result, str):
             return result
+
+        # 空列表表示检索失败（无结果且不允许兜底）
+        if not result:
+            return "未找到相关结果"
+
         lines = [f"检索到 {len(result)} 条结果：", ""]
         for i, item in enumerate(result, 1):
             text = str(item.get("text", "") or "") if isinstance(item, dict) else str(item or "")
@@ -245,7 +395,13 @@ class ZhuyishixiangToolkit(Toolkit):
             str: 格式化结果，每条格式：【序号】[来源: file_name] 内容摘要
         """
         record_tool_invocation("zhuyishixiang_toolkit.search_zhuyishixiang_knowledge")
-        return self._core.search_as_string(query=query, limit=limit, file_name_filters=file_name_filters)
+        # 注意事项库不允许全量兜底，避免返回不相关项目的内容
+        return self._core.search_as_string(
+            query=query,
+            limit=limit,
+            file_name_filters=file_name_filters,
+            allow_fallback=False  # 不允许全量兜底
+        )
 
 
 def create_summary_rag_toolkits(config_loader: ConfigLoader) -> List[Toolkit]:

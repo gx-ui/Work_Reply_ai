@@ -89,3 +89,52 @@ class SummaryAgent:
             supplier_attention=supplier_attention_text,
             history_items=history_text,
         )
+
+    def _post_process_reviews(
+        self,
+        llm_generated_reviews: str,
+        request: ChatRequest,
+    ) -> str:
+        """
+        reviews 后处理：知识库检索失败时使用 project_attention
+
+        优先级：
+        1. LLM 知识库检索结果（如果有）
+        2. project_attention（项目专属注意事项）
+        3. "无"
+
+        Args:
+            llm_generated_reviews: LLM 生成的 reviews 内容
+            request: 原始请求对象，用于获取 project_attention
+
+        Returns:
+            str: 处理后的 reviews 内容
+        """
+        import logging
+        logger = logging.getLogger("summary_agent")
+
+        project_attention = str(request.attention_info.project_attention or "").strip()
+        reviews = str(llm_generated_reviews or "").strip()
+
+        # 检查 LLM 是否检索到有效结果
+        # "未找到相关结果" 或 "无" 表示检索失败
+        retrieval_failed = (
+            not reviews or
+            reviews == "无" or
+            reviews == "待确认" or
+            "未找到相关结果" in reviews
+        )
+
+        if retrieval_failed:
+            logger.warning("[Reviews后处理] 知识库检索失败 → 使用 project_attention")
+
+            if project_attention:
+                logger.info("[Reviews后处理] 使用 project_attention（长度: %d 字符）", len(project_attention))
+                return project_attention
+
+            logger.info("[Reviews后处理] project_attention 为空 → 返回'无'")
+            return "无"
+
+        # LLM 检索成功，使用检索结果
+        logger.info("[Reviews后处理] 使用知识库检索结果（长度: %d 字符）", len(reviews))
+        return reviews

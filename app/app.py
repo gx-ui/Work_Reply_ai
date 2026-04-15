@@ -77,6 +77,14 @@ def _persist_chat_run_if_enabled(
     )
 
 
+def _truncate_output(text: str, max_length: int = 100) -> str:
+    """截断过长的文本用于日志输出。"""
+    text = str(text or "")
+    if len(text) <= max_length:
+        return text
+    return text[:max_length] + "..."
+
+
 def _parse_model_json(raw: str) -> Dict[str, Any]:
     """解析模型输出根对象为 dict。
 
@@ -242,6 +250,12 @@ async def _handle_chat(chat_req: ChatRequest) -> Dict[str, Any]:
             reviews_text = str(inner.get("reviews", "")).strip() or "无"
             info_summary_text = str(inner.get("info_summary", "")).strip() or "待确认"
 
+            # 后处理 reviews：知识库检索失败时使用 project_attention
+            reviews_text = state.summary_runner._post_process_reviews(
+                llm_generated_reviews=reviews_text,
+                request=chat_req,
+            )
+
             split_sources = get_summary_knowledge_sources()
             info_sources = split_sources.get(SUMMARY_SOURCE_BUCKET_INFO) or []
             reviews_sources = split_sources.get(SUMMARY_SOURCE_BUCKET_REVIEWS) or []
@@ -255,11 +269,36 @@ async def _handle_chat(chat_req: ChatRequest) -> Dict[str, Any]:
             )
             _persist_chat_run_if_enabled(state, chat_req, summary=summary)
             logger.info(
-                "[Summary审计] called_tools=%s reviews_sources_count=%s info_sources_count=%s no_tool_reason=%s",
+                "[Summary审计] called_tools=%s reviews_sources_count=%s info_sources_count=%s no_tool_reason=%s\n"
+                "最终输出:\n"
+                "  reviews=%s\n"
+                "  info_summary=%s\n"
+                "  reviews_sources=%s\n"
+                "  info_sources=%s",
                 summary_audit.get("called_tools", []),
                 len(reviews_sources),
                 len(info_sources),
                 summary_audit.get("no_tool_reason", "unknown"),
+                _truncate_output(reviews_text, 150),
+                _truncate_output(info_summary_text, 150),
+                reviews_sources[:5] if reviews_sources else [],
+                info_sources[:5] if info_sources else [],
+            )
+
+            # 字段隔离验证（宽松规则）
+            reviews_only_zhuyi = all("zhuyishixiang" in src or "注意事项" in src for src in reviews_sources) if reviews_sources else True
+            reviews_has_shouhou = any("shouhou" in src or "售后" in src for src in reviews_sources) if reviews_sources else False
+
+            logger.info(
+                "[Summary字段隔离验证]\n"
+                "reviews 仅来自注意事项库: %s\n"
+                "reviews 是否混入售后案例库: %s\n"
+                "info_summary 来源库类型: %s\n"
+                "宽松规则验证: %s",
+                "是" if reviews_only_zhuyi else "否",
+                "是" if reviews_has_shouhou else "否",
+                "混合来源" if (info_sources and reviews_sources) else "仅工单字段" if not info_sources else "待确认",
+                "通过" if reviews_only_zhuyi and not reviews_has_shouhou else "需检查",
             )
             _log_chat_completion(
                 endpoint="/chat",

@@ -9,28 +9,28 @@
 
   // ========== 核心配置 ==========
 
-  // localStorage.removeItem('ai_api_base'); localStorage.removeItem('ai_api_mode');
+  // 清除旧版本缓存，确保使用远程API
+  // localStorage.removeItem('ai_api_base');
+  // localStorage.removeItem('ai_api_mode');
+  localStorage.removeItem('ai_use_local_api');  // 清除本地调试开关
+  localStorage.removeItem('ai_server_api_base');  // 清除自定义服务器地址
+
   const CONFIG = {
     API_BASE: (() => {
+      // 默认使用远程服务器地址（已部署上线）
       const DEFAULT_SERVER_URL = 'https://ai-gateway-show.yunzhonghe.com/cs_assist_ai';
-      // 与根 content.js 一致：未开本地开关时用固定本地地址变量（仅 forceLocal 为 true 时生效）
-      const localUrl = 'http://localhost:8003';
-      const serverUrl = localStorage.getItem('ai_server_api_base') || DEFAULT_SERVER_URL;
 
+      // 本地调试开关：如需本地调试，在控制台执行 localStorage.setItem('ai_use_local_api', 'true')
       const forceLocal = localStorage.getItem('ai_use_local_api') === 'true';
-      const forceServer = localStorage.getItem('ai_use_server_api') === 'true';
-
-      // 与根 content.js：强制本地 > 强制远端（一般与默认一致可省略）> 默认网关
       if (forceLocal) {
-        console.log('[AI助手] 使用本地API:', localUrl);
+        const localUrl = 'http://localhost:8003/cs_assist_ai';
+        console.log('[AI助手] ⚠️ 本地调试模式:', localUrl);
+        console.log('[AI助手] 提示: 生产环境请关闭本地调试模式（localStorage.removeItem("ai_use_local_api")）');
         return localUrl;
       }
-      if (forceServer) {
-        console.log('[AI助手] 强制使用服务器API:', serverUrl);
-        return serverUrl;
-      }
-      console.log('[AI助手] 默认使用服务器API:', serverUrl);
-      return serverUrl;
+
+      console.log('[AI助手] ✅ 使用远程API:', DEFAULT_SERVER_URL);
+      return DEFAULT_SERVER_URL;
     })(),
     INIT_SCAN_INTERVAL: 250, // 首屏快速探测
     INIT_SCAN_TIMEOUT: 15000, // 首屏探测最多15秒
