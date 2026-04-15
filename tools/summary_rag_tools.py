@@ -140,7 +140,7 @@ class KefuShouhouToolkit(Toolkit):
         self._core = SummaryRetrievalCore(milvus_tool=milvus_tool, tool_name="KefuShouhou")
         super().__init__(name="kefu_shouhou_toolkit", tools=[self.search_kefu_shouhou_knowledge], **kwargs)
 
-    def search_kefu_shouhou_knowledge(self, query: str, limit: Optional[int] = 5) -> str:
+    def search_kefu_shouhou_knowledge(self, query: str, limit: Optional[int] = 12) -> str:
         """
         从客服售后知识库中语义检索与工单主诉相关的处理流程与口径。
 
@@ -153,7 +153,7 @@ class KefuShouhouToolkit(Toolkit):
         Args:
             query (str): 检索意图，建议 5-20 字，聚焦售后业务关键词。
                 示例："少发 补发 处理流程" / "7天无理由退货 退款流程" / "物流停滞 催件处理"
-            limit (Optional[int]): 返回数量，默认 10，建议 8-15。
+            limit (Optional[int]): 返回数量，默认 12，建议 10-15。
 
         Returns:
             str: 格式化结果，每条格式：【序号】[来源: file_name] 内容摘要
@@ -206,7 +206,7 @@ class ZhuyishixiangToolkit(Toolkit):
     def search_zhuyishixiang_knowledge(
         self,
         query: str,
-        limit: Optional[int] = 5,
+        limit: Optional[int] = 10,
         file_name_filters: Optional[Union[str, List[str]]] = None,
     ) -> str:
         """
@@ -224,7 +224,7 @@ class ZhuyishixiangToolkit(Toolkit):
         Args:
             query (str): 检索意图，建议 5-20 字，聚焦规则/注意事项关键词。
                 示例："投诉工单 处理规范" / "补偿标准 特殊规则" / "供应商责任 判定标准"
-            limit (Optional[int]): 返回数量，默认 10，建议 8-15。
+            limit (Optional[int]): 返回数量，默认 12，建议 10-15。
             file_name_filters: 从 list_zhuyishixiang_file_names 筛选的文件名，强烈建议传入。
 
         Returns:
@@ -258,4 +258,44 @@ def create_summary_rag_toolkits(config_loader: ConfigLoader) -> List[Toolkit]:
     except Exception as e:
         logger.warning("[Summary RAG] ZhuyishixiangToolkit 初始化失败，跳过\n%s: %s", type(e).__name__, e)
 
+    return toolkits
+
+
+def create_summary_reviews_toolkits(config_loader: ConfigLoader) -> List[Toolkit]:
+    """
+    为 reviews 阶段创建工具集：仅注意事项库。
+    """
+    embedder_config = config_loader.get_embedding_config()
+    toolkits: List[Toolkit] = []
+    try:
+        milvus_cfg_zyx = config_loader.get_milvus_config_by_key("milvus_zhuyishixiang")
+        milvus_tool_zyx = create_milvus_tools(milvus_cfg_zyx, embedder_config)
+        toolkits.append(ZhuyishixiangToolkit(milvus_tool=milvus_tool_zyx, config_loader=config_loader))
+        logger.info("[Summary RAG] reviews阶段 ZhuyishixiangToolkit 初始化成功")
+    except Exception as e:
+        logger.warning(
+            "[Summary RAG] reviews阶段 ZhuyishixiangToolkit 初始化失败，跳过\n%s: %s",
+            type(e).__name__,
+            e,
+        )
+    return toolkits
+
+
+def create_summary_info_toolkits(config_loader: ConfigLoader) -> List[Toolkit]:
+    """
+    为 info_summary 阶段创建工具集：仅售后案例库。
+    """
+    embedder_config = config_loader.get_embedding_config()
+    toolkits: List[Toolkit] = []
+    try:
+        milvus_cfg_ks = config_loader.get_milvus_config_by_key("milvus_kefu_shouhou")
+        milvus_tool_ks = create_milvus_tools(milvus_cfg_ks, embedder_config)
+        toolkits.append(KefuShouhouToolkit(milvus_tool=milvus_tool_ks, config_loader=config_loader))
+        logger.info("[Summary RAG] info_summary阶段 KefuShouhouToolkit 初始化成功")
+    except Exception as e:
+        logger.warning(
+            "[Summary RAG] info_summary阶段 KefuShouhouToolkit 初始化失败，跳过\n%s: %s",
+            type(e).__name__,
+            e,
+        )
     return toolkits

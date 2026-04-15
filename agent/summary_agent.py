@@ -1,7 +1,10 @@
-﻿"""Summary agent builder and prompt formatters."""
+"""
+工单摘要：配置在 __init__ 加载，_build_agent 返回 agno Agent 实例；
+提示词拼装见 format_prompt。
+"""
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 from agno.agent import Agent
 from agno.models.dashscope import DashScope
@@ -9,15 +12,17 @@ from agno.models.dashscope import DashScope
 from config.config_loader import ConfigLoader
 from entity.request import ChatRequest
 from prompt.summary_agent_prompt import (
-    SUMMARY_INFO_AGENT_INSTRUCTIONS,
-    SUMMARY_INFO_PROMPT_TEMPLATE,
-    SUMMARY_REVIEWS_AGENT_INSTRUCTIONS,
-    SUMMARY_REVIEWS_PROMPT_TEMPLATE,
+    SUMMARY_AGENT_INSTRUCTIONS,
+    SUMMARY_PROMPT_TEMPLATE,
+    REVIEWS_AGENT_INSTRUCTIONS,
+    REVIEWS_PROMPT_TEMPLATE,
+    INFO_SUMMARY_AGENT_INSTRUCTIONS,
+    INFO_SUMMARY_PROMPT_TEMPLATE,
 )
 
 
 class SummaryAgent:
-    """Build summary agents and format prompts for summary stages."""
+    """工单摘要封装。"""
 
     def __init__(self, config_loader: Optional[ConfigLoader] = None) -> None:
         cfg = config_loader or ConfigLoader()
@@ -32,26 +37,37 @@ class SummaryAgent:
         tools: Optional[List[Any]] = None,
         db: Optional[Any] = None,
         instructions: Optional[str] = None,
-        agent_id: str = "work-reply-ai-summary-agent",
     ) -> Agent:
         return Agent(
-            id=agent_id,
+            id="work-reply-ai-summary-agent",
             model=DashScope(
                 id=self._model_id,
                 api_key=self._api_key,
                 base_url=self._base_url,
             ),
             tools=list(tools or []),
-            instructions=instructions or SUMMARY_INFO_AGENT_INSTRUCTIONS,
+            instructions=str(instructions or SUMMARY_AGENT_INSTRUCTIONS),
             markdown=False,
             db=db,
         )
 
-    @staticmethod
-    def _build_prompt_payload(request: ChatRequest) -> Dict[str, str]:
+    def format_prompt(self, request: ChatRequest) -> str:
+        """拼装摘要任务用户提示。"""
         ticket = request.works_info
         core = request.core_info
         attention = request.attention_info
+
+        title_text = str(ticket.title or "")
+        desc_text = str(ticket.desc or "")
+        status_text = str(ticket.status or "")
+        priority_text = str(ticket.priority or "")
+
+        customer_name_text = str(core.customer_name or "")
+        project_name_text = str(core.project_name or "")
+        mall_name_text = str(core.mall_name or "")
+
+        project_attention_text = str(attention.project_attention or "")
+        supplier_attention_text = str(attention.supplier_attention or "")
 
         history_lines: List[str] = []
         for item in (ticket.history or [])[:10]:
@@ -59,41 +75,73 @@ class SummaryAgent:
                 line = str(item.get("summary") or item.get("content") or "")
             else:
                 line = str(item)
-            line = line.strip()
             if line:
                 history_lines.append(line)
-
         history_text = "\n".join(f"{i}. {line}" for i, line in enumerate(history_lines, 1))
 
-        return {
-            "title": str(ticket.title or ""),
-            "desc": str(ticket.desc or ""),
-            "status": str(ticket.status or ""),
-            "priority": str(ticket.priority or ""),
-            "customer_name": str(core.customer_name or ""),
-            "project_name": str(core.project_name or ""),
-            "mall_name": str(core.mall_name or ""),
-            "project_attention": str(attention.project_attention or ""),
-            "supplier_attention": str(attention.supplier_attention or ""),
-            "history_items": history_text,
-        }
+        return SUMMARY_PROMPT_TEMPLATE.format(
+            title=title_text,
+            desc=desc_text,
+            status=status_text,
+            priority=priority_text,
+            customer_name=customer_name_text,
+            project_name=project_name_text,
+            mall_name=mall_name_text,
+            project_attention=project_attention_text,
+            supplier_attention=supplier_attention_text,
+            history_items=history_text,
+        )
+
+    def _build_history_text(self, request: ChatRequest) -> str:
+        ticket = request.works_info
+        history_lines: List[str] = []
+        for item in (ticket.history or [])[:10]:
+            if isinstance(item, dict):
+                line = str(item.get("summary") or item.get("content") or "")
+            else:
+                line = str(item)
+            if line:
+                history_lines.append(line)
+        return "\n".join(f"{i}. {line}" for i, line in enumerate(history_lines, 1))
 
     def format_reviews_prompt(self, request: ChatRequest) -> str:
-        payload = self._build_prompt_payload(request)
-        return SUMMARY_REVIEWS_PROMPT_TEMPLATE.format(**payload)
+        ticket = request.works_info
+        core = request.core_info
+        attention = request.attention_info
+        history_text = self._build_history_text(request)
+        return REVIEWS_PROMPT_TEMPLATE.format(
+            title=str(ticket.title or ""),
+            desc=str(ticket.desc or ""),
+            status=str(ticket.status or ""),
+            priority=str(ticket.priority or ""),
+            customer_name=str(core.customer_name or ""),
+            project_name=str(core.project_name or ""),
+            mall_name=str(core.mall_name or ""),
+            project_attention=str(attention.project_attention or ""),
+            supplier_attention=str(attention.supplier_attention or ""),
+            history_items=history_text,
+        )
 
-    def format_info_summary_prompt(self, request: ChatRequest) -> str:
-        payload = self._build_prompt_payload(request)
-        return SUMMARY_INFO_PROMPT_TEMPLATE.format(**payload)
-
-    # Backward-compatible alias if any caller still uses old method name.
-    def format_prompt(self, request: ChatRequest) -> str:
-        return self.format_info_summary_prompt(request)
+    def format_info_summary_prompt(self, request: ChatRequest, reviews_context: str = "") -> str:
+        ticket = request.works_info
+        core = request.core_info
+        history_text = self._build_history_text(request)
+        return INFO_SUMMARY_PROMPT_TEMPLATE.format(
+            title=str(ticket.title or ""),
+            desc=str(ticket.desc or ""),
+            status=str(ticket.status or ""),
+            priority=str(ticket.priority or ""),
+            customer_name=str(core.customer_name or ""),
+            project_name=str(core.project_name or ""),
+            mall_name=str(core.mall_name or ""),
+            history_items=history_text,
+            reviews_context=str(reviews_context or ""),
+        )
 
     @staticmethod
-    def reviews_instructions() -> str:
-        return SUMMARY_REVIEWS_AGENT_INSTRUCTIONS
+    def get_reviews_instructions() -> str:
+        return REVIEWS_AGENT_INSTRUCTIONS
 
     @staticmethod
-    def info_instructions() -> str:
-        return SUMMARY_INFO_AGENT_INSTRUCTIONS
+    def get_info_summary_instructions() -> str:
+        return INFO_SUMMARY_AGENT_INSTRUCTIONS

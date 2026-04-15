@@ -2,7 +2,7 @@
     "llm": {
         "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1/",
         "api_key": "sk-67538ac36a854414b412e24c9b6d2ea4",
-        "model_name": "qwen3.5-plus",
+        "model_name": "qwen3.5-flash",
         "temperature": 0.1,
         "stream": false,
         "timeout": 120,
@@ -15,13 +15,13 @@
     },
 
 "milvus": {
-        "host": "139.9.63.194",
+        "host": "172.16.64.109",
         "port": 32017,
         "db_name": "rag",
         "connection_alias": "default",
         "dim": 2048,
         "collection_name": "kefubuzhishiku1028ban_20251028155535",
-        "limit": 10,
+        "limit": 12,
         "search_params": {
             "metric_type": "COSINE",
             "params": {"nprobe": 10}
@@ -30,12 +30,12 @@
     },
 
     "milvus_kefu_shouhou": {
-        "host": "139.9.63.194",
+        "host": "172.16.64.109",
         "port": 32017,
         "db_name": "rag",
         "dim": 2048,
         "collection_name": "kefushouhouanliku_20260313112927",
-        "limit": 10,
+        "limit": 12,
         "search_params": {
             "metric_type": "COSINE",
             "params": {"nprobe": 10}
@@ -44,12 +44,12 @@
     },
 
     "milvus_zhuyishixiang": {
-        "host": "139.9.63.194",
+        "host": "172.16.64.109",
         "port": 32017,
         "db_name": "rag",
         "dim": 2048,
         "collection_name": "kefushouhouxiangmuzhuyishixiang_20260313112954",
-        "limit": 10,
+        "limit": 12,
         "search_params": {
             "metric_type": "COSINE",
             "params": {"nprobe": 10}
@@ -78,7 +78,7 @@
 
     "mysql": {
 
-        "host": "121.37.229.249",
+        "host": "172.16.64.104",
         "port": 3306,
         "user": "root",
         "password": "_AAAByQ0ODAoPeJx9Uk2P",

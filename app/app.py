@@ -21,6 +21,7 @@ from services.agent_service import (
     get_state,
     ensure_agents,
     ensure_summary_agent,
+    ensure_summary_agents_split,
     agent_run,
     agent_run_stream_collect,
     reset_knowledge_sources,
@@ -218,25 +219,58 @@ async def _handle_chat(chat_req: ChatRequest) -> Dict[str, Any]:
     try:
         # summary 意图
         if chat_req.intent == "summary":
-            if state.agent_summary is None:
-                raise HTTPException(status_code=500, detail="Summary Agent 初始化失败")
+            ensure_summary_agents_split()
+            state = get_state()
+            if state.summary_runner is None:
+                raise HTTPException(status_code=500, detail="Summary runner 未初始化")
+            if state.agent_summary_reviews is None or state.agent_summary_info is None:
+                raise HTTPException(status_code=500, detail="Summary 分阶段 Agent 初始化失败")
 
-            summary_prompt = state.summary_runner.format_prompt(chat_req)
-            raw, summary_kb, tool_audit = await agent_run(
-                state.agent_summary,
-                summary_prompt,
+            reviews_prompt = state.summary_runner.format_reviews_prompt(chat_req)
+            reviews_raw, reviews_kb, reviews_audit = await agent_run(
+                state.agent_summary_reviews,
+                reviews_prompt,
                 session_id=agent_sid,
             )
+            reviews_obj = _parse_model_json(reviews_raw)
+            reviews_text = str(reviews_obj.get("reviews", "")).strip()
+            if not reviews_text:
+                reviews_text = "无"
 
-            inner = _parse_model_json(raw)["summary"]
-            if not isinstance(inner, dict):
-                raise HTTPException(status_code=502, detail="摘要 JSON：summary 须为对象")
+            info_prompt = state.summary_runner.format_info_summary_prompt(
+                chat_req,
+                reviews_context=reviews_text,
+            )
+            info_raw, info_kb, info_audit = await agent_run(
+                state.agent_summary_info,
+                info_prompt,
+                session_id=agent_sid,
+            )
+            info_obj = _parse_model_json(info_raw)
+            info_summary_text = str(info_obj.get("info_summary", "")).strip()
+            if not info_summary_text:
+                info_summary_text = "待确认"
+
+            summary_kb = merge_knowledge_source_names(reviews_kb, info_kb)
             summary = Summary(
-                info_summary=inner["info_summary"],
-                reviews=inner["reviews"],
+                info_summary=info_summary_text,
+                reviews=reviews_text,
                 summary_sources=summary_kb,
             )
             _persist_chat_run_if_enabled(state, chat_req, summary=summary)
+            merged_hist = {}
+            for key, value in (reviews_audit.get("called_tool_histogram") or {}).items():
+                merged_hist[key] = int(value)
+            for key, value in (info_audit.get("called_tool_histogram") or {}).items():
+                merged_hist[key] = merged_hist.get(key, 0) + int(value)
+            merged_audit = {
+                "available_tool_count": int(reviews_audit.get("available_tool_count", 0))
+                + int(info_audit.get("available_tool_count", 0)),
+                "called_tool_count": int(reviews_audit.get("called_tool_count", 0))
+                + int(info_audit.get("called_tool_count", 0)),
+                "called_tool_histogram": merged_hist,
+                "no_tool_reason": f"reviews:{reviews_audit.get('no_tool_reason', 'unknown')};info:{info_audit.get('no_tool_reason', 'unknown')}",
+            }
             _log_chat_completion(
                 endpoint="/chat",
                 intent=chat_req.intent,
@@ -244,7 +278,7 @@ async def _handle_chat(chat_req: ChatRequest) -> Dict[str, Any]:
                 kb_hit_docs=len(summary_kb),
                 final_sources=len(summary_kb),
                 fallback_used=False,
-                tool_audit=tool_audit,
+                tool_audit=merged_audit,
             )
             return {"summary": summary.model_dump()}
 

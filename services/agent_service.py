@@ -11,7 +11,11 @@ from agno.agent import Agent
 
 from config.config_loader import ConfigLoader
 from tools.rag_retrieval_tool import KnowledgeRetrievalToolkit
-from tools.summary_rag_tools import create_summary_rag_toolkits
+from tools.summary_rag_tools import (
+    create_summary_rag_toolkits,
+    create_summary_reviews_toolkits,
+    create_summary_info_toolkits,
+)
 from agent.work_reply_agent import WorkReplyAgent
 from agent.summary_agent import SummaryAgent
 from db.mysql_store import init_mysql_engine_from_config
@@ -40,6 +44,7 @@ __all__ = [
     "get_state",
     "ensure_agents",
     "ensure_summary_agent",
+    "ensure_summary_agents_split",
     "agent_run",
     "agent_run_stream_collect",
     "reset_knowledge_sources",
@@ -402,6 +407,8 @@ class RuntimeState:
     agent_rag: Optional[Agent] = None
     agent_plain: Optional[Agent] = None
     agent_summary: Optional[Agent] = None
+    agent_summary_reviews: Optional[Agent] = None
+    agent_summary_info: Optional[Agent] = None
     work_reply_runner: Optional[Any] = None
     summary_runner: Optional[Any] = None
     rag_enabled: bool = False
@@ -431,6 +438,8 @@ def init_state() -> RuntimeState:
         agent_rag=None,
         agent_plain=None,
         agent_summary=None,
+        agent_summary_reviews=None,
+        agent_summary_info=None,
         work_reply_runner=None,
         summary_runner=None,
         rag_enabled=False,
@@ -490,6 +499,32 @@ def ensure_summary_agent() -> None:
             state.summary_runner = SummaryAgent(state.config)
         summary_toolkits = create_summary_rag_toolkits(state.config)
         state.agent_summary = state.summary_runner._build_agent(tools=summary_toolkits)
+
+
+def ensure_summary_agents_split() -> None:
+    """
+    确保摘要两阶段 Agent 已初始化：
+    - reviews 阶段：仅注意事项库工具
+    - info_summary 阶段：仅售后案例库工具
+    """
+    state = get_state()
+    if state.agent_summary_reviews is not None and state.agent_summary_info is not None:
+        return
+    with _STATE_LOCK:
+        if state.summary_runner is None:
+            state.summary_runner = SummaryAgent(state.config)
+        if state.agent_summary_reviews is None:
+            reviews_toolkits = create_summary_reviews_toolkits(state.config)
+            state.agent_summary_reviews = state.summary_runner._build_agent(
+                tools=reviews_toolkits,
+                instructions=state.summary_runner.get_reviews_instructions(),
+            )
+        if state.agent_summary_info is None:
+            info_toolkits = create_summary_info_toolkits(state.config)
+            state.agent_summary_info = state.summary_runner._build_agent(
+                tools=info_toolkits,
+                instructions=state.summary_runner.get_info_summary_instructions(),
+            )
 
 
 # ────────────────────────────────────────────────────────────────
