@@ -8,11 +8,10 @@ import re
 import time
 import traceback
 from datetime import datetime
-from typing import Any, AsyncIterator, Dict, Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
 from entity.request import ChatRequest
 from entity.response import QueryAnswer, Suggestion, Summary
 from db.chat_run_store import persist_chat_run_safe
@@ -21,9 +20,10 @@ from services.agent_service import (
     get_state,
     ensure_agents,
     ensure_summary_agent,
-    ensure_summary_agents_split,
     agent_run,
-    agent_run_stream_collect,
+    get_summary_knowledge_sources,
+    SUMMARY_SOURCE_BUCKET_INFO,
+    SUMMARY_SOURCE_BUCKET_REVIEWS,
     reset_knowledge_sources,
     merge_knowledge_source_names,
     RuntimeState,
@@ -115,10 +115,6 @@ def _get_work_reply_agent(state: RuntimeState):
     if state.work_reply_runner is None:
         raise HTTPException(status_code=500, detail="WorkReply runner 未初始化")
     return agent
-
-
-def _sse_bytes(payload: Dict[str, Any]) -> bytes:
-    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n".encode("utf-8")
 
 
 def _scoped_session_id(session_id: Optional[str], intent: str) -> Optional[str]:
@@ -219,66 +215,60 @@ async def _handle_chat(chat_req: ChatRequest) -> Dict[str, Any]:
     try:
         # summary 意图
         if chat_req.intent == "summary":
-            ensure_summary_agents_split()
+            ensure_summary_agent()
             state = get_state()
             if state.summary_runner is None:
                 raise HTTPException(status_code=500, detail="Summary runner 未初始化")
-            if state.agent_summary_reviews is None or state.agent_summary_info is None:
-                raise HTTPException(status_code=500, detail="Summary 分阶段 Agent 初始化失败")
+            if state.agent_summary is None:
+                raise HTTPException(status_code=500, detail="Summary Agent 初始化失败")
 
-            reviews_prompt = state.summary_runner.format_reviews_prompt(chat_req)
-            reviews_raw, reviews_kb, reviews_audit = await agent_run(
-                state.agent_summary_reviews,
-                reviews_prompt,
+            summary_prompt = state.summary_runner.format_prompt(chat_req)
+            summary_raw, summary_kb, summary_audit = await agent_run(
+                state.agent_summary,
+                summary_prompt,
                 session_id=agent_sid,
             )
-            reviews_obj = _parse_model_json(reviews_raw)
-            reviews_text = str(reviews_obj.get("reviews", "")).strip()
-            if not reviews_text:
-                reviews_text = "无"
+            if int(summary_audit.get("available_tool_count", 0)) > 0 and int(summary_audit.get("called_tool_count", 0)) <= 0:
+                logger.warning(
+                    "[Summary工具告警] 可用工具>0但未调用任何工具，继续返回模型结果\n"
+                    "no_tool_reason=%s",
+                    summary_audit.get("no_tool_reason", "unknown"),
+                )
 
-            info_prompt = state.summary_runner.format_info_summary_prompt(
-                chat_req,
-                reviews_context=reviews_text,
-            )
-            info_raw, info_kb, info_audit = await agent_run(
-                state.agent_summary_info,
-                info_prompt,
-                session_id=agent_sid,
-            )
-            info_obj = _parse_model_json(info_raw)
-            info_summary_text = str(info_obj.get("info_summary", "")).strip()
-            if not info_summary_text:
-                info_summary_text = "待确认"
+            raw_obj = _parse_model_json(summary_raw)
+            inner = raw_obj.get("summary")
+            if not isinstance(inner, dict):
+                raise HTTPException(status_code=502, detail="summary JSON：summary 须为对象")
+            reviews_text = str(inner.get("reviews", "")).strip() or "无"
+            info_summary_text = str(inner.get("info_summary", "")).strip() or "待确认"
 
-            summary_kb = merge_knowledge_source_names(reviews_kb, info_kb)
+            split_sources = get_summary_knowledge_sources()
+            info_sources = split_sources.get(SUMMARY_SOURCE_BUCKET_INFO) or []
+            reviews_sources = split_sources.get(SUMMARY_SOURCE_BUCKET_REVIEWS) or []
+            # 统一日志中的“最终来源数”口径：分桶并集 + 通用来源并集
+            merged_sources = merge_knowledge_source_names(info_sources, reviews_sources, summary_kb)
             summary = Summary(
                 info_summary=info_summary_text,
                 reviews=reviews_text,
-                summary_sources=summary_kb,
+                info_sources=info_sources,
+                reviews_sources=reviews_sources,
             )
             _persist_chat_run_if_enabled(state, chat_req, summary=summary)
-            merged_hist = {}
-            for key, value in (reviews_audit.get("called_tool_histogram") or {}).items():
-                merged_hist[key] = int(value)
-            for key, value in (info_audit.get("called_tool_histogram") or {}).items():
-                merged_hist[key] = merged_hist.get(key, 0) + int(value)
-            merged_audit = {
-                "available_tool_count": int(reviews_audit.get("available_tool_count", 0))
-                + int(info_audit.get("available_tool_count", 0)),
-                "called_tool_count": int(reviews_audit.get("called_tool_count", 0))
-                + int(info_audit.get("called_tool_count", 0)),
-                "called_tool_histogram": merged_hist,
-                "no_tool_reason": f"reviews:{reviews_audit.get('no_tool_reason', 'unknown')};info:{info_audit.get('no_tool_reason', 'unknown')}",
-            }
+            logger.info(
+                "[Summary审计] called_tools=%s reviews_sources_count=%s info_sources_count=%s no_tool_reason=%s",
+                summary_audit.get("called_tools", []),
+                len(reviews_sources),
+                len(info_sources),
+                summary_audit.get("no_tool_reason", "unknown"),
+            )
             _log_chat_completion(
                 endpoint="/chat",
                 intent=chat_req.intent,
                 total_ms=int((time.time() - started_at) * 1000),
-                kb_hit_docs=len(summary_kb),
-                final_sources=len(summary_kb),
+                kb_hit_docs=len(merged_sources),
+                final_sources=len(merged_sources),
                 fallback_used=False,
-                tool_audit=merged_audit,
+                tool_audit=summary_audit,
             )
             return {"summary": summary.model_dump()}
 
@@ -352,167 +342,6 @@ async def _handle_chat(chat_req: ChatRequest) -> Dict[str, Any]:
         reset_request_context(ctx_token)
 
 
-async def _handle_chat_stream(
-    chat_req: ChatRequest,
-    request_id: Optional[str] = None,
-) -> AsyncIterator[bytes]:
-    """SSE：delta/tool 事件，最后 event=done 携带与 /chat 一致的业务 JSON。"""
-    started_at = time.time()
-    current_ctx = get_request_context()
-    local_trace_tokens = None
-    if request_id and not str(current_ctx.get("request_id") or "").strip():
-        local_trace_tokens = begin_request_trace(request_id)
-    sid = (chat_req.session_id and str(chat_req.session_id).strip()) or None
-    ctx_token = update_request_context(
-        request_id=request_id,
-        intent=chat_req.intent,
-        ticket_id=chat_req.works_info.ticket_id,
-        session_id=sid or "",
-    )
-    try:
-        _ensure_chat_agents()
-        state = get_state()
-        agent_sid = _scoped_session_id(sid, chat_req.intent)
-        logger.info(
-            "收到 /chat/stream intent=%s ticket_id=%s session_id=%s agent_session_id=%s",
-            chat_req.intent,
-            chat_req.works_info.ticket_id,
-            sid or "",
-            agent_sid or "",
-        )
-        _log_chat_request_payload("/chat/stream", chat_req)
-
-        if chat_req.intent == "summary":
-            if state.agent_summary is None:
-                yield _sse_bytes({"event": "error", "detail": "Summary Agent 初始化失败"})
-                return
-            if state.summary_runner is None:
-                yield _sse_bytes({"event": "error", "detail": "Summary runner 未初始化"})
-                return
-            prompt = state.summary_runner.format_prompt(chat_req)
-            agent = state.agent_summary
-        elif chat_req.intent == "query":
-            user_query = chat_req.query_info.query
-            if not user_query:
-                yield _sse_bytes({"event": "error", "detail": "query_info.query 不能为空"})
-                return
-            try:
-                agent = _get_work_reply_agent(state)
-            except HTTPException as ex:
-                yield _sse_bytes({"event": "error", "detail": str(ex.detail)})
-                return
-            prompt = state.work_reply_runner.format_query_prompt(chat_req)
-        elif chat_req.intent == "suggestion":
-            try:
-                agent = _get_work_reply_agent(state)
-            except HTTPException as ex:
-                yield _sse_bytes({"event": "error", "detail": str(ex.detail)})
-                return
-            prompt = state.work_reply_runner.format_prompt(chat_req)
-        else:
-            yield _sse_bytes(
-                {
-                    "event": "error",
-                    "detail": f"不支持的 intent：{chat_req.intent!r}",
-                }
-            )
-            return
-
-        reset_knowledge_sources()
-        async for part in agent_run_stream_collect(agent, prompt, session_id=agent_sid):
-            k = part.get("kind")
-            if k == "delta":
-                yield _sse_bytes({"event": "delta", "text": part.get("text", "")})
-            elif k == "tool":
-                yield _sse_bytes({"event": "tool", "name": part.get("event", "")})
-            elif k == "error":
-                yield _sse_bytes({"event": "error", "detail": part.get("message", "unknown")})
-                return
-            elif k == "complete":
-                ro = part["run_output"]
-                kb = part["kb"]
-                audit = part.get("audit") or {}
-                raw = str(ro.content).strip()
-                try:
-                    if chat_req.intent == "summary":
-                        inner = _parse_model_json(raw)["summary"]
-                        if not isinstance(inner, dict):
-                            raise ValueError("summary 须为对象")
-                        summary = Summary(
-                            info_summary=inner["info_summary"],
-                            reviews=inner["reviews"],
-                            summary_sources=kb,
-                        )
-                        _persist_chat_run_if_enabled(state, chat_req, summary=summary)
-                        _log_chat_completion(
-                            endpoint="/chat/stream",
-                            intent=chat_req.intent,
-                            total_ms=int((time.time() - started_at) * 1000),
-                            kb_hit_docs=len(kb),
-                            final_sources=len(kb),
-                            fallback_used=False,
-                            tool_audit=audit,
-                        )
-                        yield _sse_bytes({"event": "done", "data": {"summary": summary.model_dump()}})
-                    elif chat_req.intent == "query":
-                        qobj = _parse_model_json(raw)
-                        answer = str(qobj.get("answer", "")).strip()
-                        fallback_used = False
-                        if not answer:
-                            fallback_used = True
-                            answer = "知识库中暂未找到与当前问题直接相关的依据，建议补充更具体的业务关键词后再查询。"
-                        llm_sources = qobj.get("sources") or []
-                        if not isinstance(llm_sources, list):
-                            raise ValueError("sources 须为数组")
-                        all_sources = merge_knowledge_source_names(kb, llm_sources)
-                        qa = QueryAnswer(answer=answer, query_sources=all_sources)
-                        _persist_chat_run_if_enabled(state, chat_req, query_answer=qa)
-                        _log_chat_completion(
-                            endpoint="/chat/stream",
-                            intent=chat_req.intent,
-                            total_ms=int((time.time() - started_at) * 1000),
-                            kb_hit_docs=len(kb),
-                            final_sources=len(all_sources),
-                            fallback_used=fallback_used,
-                            tool_audit=audit,
-                        )
-                        yield _sse_bytes({"event": "done", "data": qa.model_dump(by_alias=True)})
-                    else:
-                        suggestion_content = str(_parse_model_json(raw).get("suggestion", "")).strip()
-                        fallback_used = False
-                        if not suggestion_content:
-                            fallback_used = True
-                            suggestion_content = (
-                                "知识库中暂未检索到相关信息，建议补充订单/问题细节后再核实处理。"
-                            )
-                        sugg = Suggestion(content=suggestion_content, suggestion_sources=kb)
-                        _persist_chat_run_if_enabled(state, chat_req, suggestion=sugg)
-                        _log_chat_completion(
-                            endpoint="/chat/stream",
-                            intent=chat_req.intent,
-                            total_ms=int((time.time() - started_at) * 1000),
-                            kb_hit_docs=len(kb),
-                            final_sources=len(kb),
-                            fallback_used=fallback_used,
-                            tool_audit=audit,
-                        )
-                        yield _sse_bytes(
-                            {"event": "done", "data": sugg.model_dump(by_alias=True)}
-                        )
-                except Exception as ex:
-                    logger.exception("流式 /chat/stream 解析或持久化失败")
-                    yield _sse_bytes({"event": "error", "detail": str(ex)})
-                return
-
-    except Exception as e:
-        logger.exception("流式 /chat/stream 失败")
-        yield _sse_bytes({"event": "error", "detail": str(e)})
-    finally:
-        reset_request_context(ctx_token)
-        if local_trace_tokens is not None:
-            end_request_trace(local_trace_tokens)
-
-
 @api_router.post("/chat")
 async def unified_chat(request: ChatRequest):
     try:
@@ -529,30 +358,10 @@ async def unified_chat(request: ChatRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.post("/chat/stream")
-async def unified_chat_stream(request: ChatRequest):
-    req_ctx = get_request_context()
-    request_id = str(req_ctx.get("request_id") or "").strip() or None
-    return StreamingResponse(
-        _handle_chat_stream(request, request_id=request_id),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
-
-
 # 兼容旧 URL：API_BASE 已是 …/cs_assist_ai 时仍拼接 /work_reply_ai/chat（曾导致 404）
 @api_router.post("/work_reply_ai/chat")
 async def unified_chat_legacy_path(request: ChatRequest):
     return await unified_chat(request)
-
-
-@api_router.post("/work_reply_ai/chat/stream")
-async def unified_chat_stream_legacy_path(request: ChatRequest):
-    return await unified_chat_stream(request)
 
 
 @api_router.get("/health")
@@ -577,10 +386,8 @@ async def root():
         "version": "1.0",
         "endpoints": {
             "chat": "/cs_assist_ai/chat",
-            "chat_stream": "/cs_assist_ai/chat/stream",
             "health": "/cs_assist_ai/health",
             "chat_legacy": "/cs_assist_ai/work_reply_ai/chat",
-            "chat_stream_legacy": "/cs_assist_ai/work_reply_ai/chat/stream",
         },
     }
 

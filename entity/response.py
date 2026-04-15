@@ -21,7 +21,8 @@ class Summary(ResponseBaseModel):
     """工单内容总结"""
     info_summary: str = Field(default="待确认", description="工单信息总结")
     reviews: str = Field(default="无", description="注意事项罗列")
-    summary_sources: List[str] = Field(default_factory=list, description="总结来源")
+    info_sources: List[str] = Field(default_factory=list, description="信息总结来源")
+    reviews_sources: List[str] = Field(default_factory=list, description="注意事项来源")
 
 
 class QueryAnswer(ResponseBaseModel):

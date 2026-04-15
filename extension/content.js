@@ -47,14 +47,6 @@
     return `${base}/cs_assist_ai/chat`;
   }
 
-  /** 与 resolveChatApiUrl 对应，POST .../chat/stream（SSE） */
-  function resolveChatStreamApiUrl() {
-    const base = String(CONFIG.API_BASE || '').trim().replace(/\/+$/, '');
-    if (base.endsWith('/cs_assist_ai') || base.endsWith('/work_reply_ai')) {
-      return `${base}/chat/stream`;
-    }
-    return `${base}/cs_assist_ai/chat/stream`;
-  }
   // ========== 全局变量 ==========
   // ========== 状态管理 ==========
   const AI_STATES = {
@@ -2240,95 +2232,32 @@
         }
       };
 
-      const useStream = localStorage.getItem('ai_use_stream_chat') === 'true';
-      let apiResponse;
-
-      if (useStream) {
-        const streamUrl = resolveChatStreamApiUrl();
-        apiResponse = await new Promise((resolve, reject) => {
-          const port = chrome.runtime.connect({ name: 'chatStream' });
-          let doneData = null;
-          const timeoutId = setTimeout(() => {
-            try {
-              port.disconnect();
-            } catch (e) {}
-            reject(new Error('流式请求超时，请稍后重试'));
-          }, 90000);
-          port.onMessage.addListener(function onMsg(msg) {
-            if (!msg.ok) {
-              clearTimeout(timeoutId);
-              port.onMessage.removeListener(onMsg);
-              try {
-                port.disconnect();
-              } catch (e) {}
-              reject(new Error(msg.error || '流式请求失败'));
-              return;
-            }
-            if (msg.finished) {
-              clearTimeout(timeoutId);
-              port.onMessage.removeListener(onMsg);
-              try {
-                port.disconnect();
-              } catch (e) {}
-              if (doneData) {
-                resolve(doneData);
-              } else {
-                reject(new Error('流式结束但未收到有效结果'));
-              }
-              return;
-            }
-            const ev = msg.event;
-            if (!ev || !ev.event) {
-              return;
-            }
-            if (ev.event === 'done' && ev.data) {
-              doneData = ev.data;
-            }
-            if (ev.event === 'error') {
-              clearTimeout(timeoutId);
-              port.onMessage.removeListener(onMsg);
-              try {
-                port.disconnect();
-              } catch (e2) {}
-              reject(new Error(ev.detail || '流式错误'));
-            }
-          });
-          port.postMessage({
-            action: 'start',
-            url: streamUrl,
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: requestData,
-          });
+      const apiUrl = resolveChatApiUrl();
+      const apiResponse = await new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage({
+          action: 'apiRequest',
+          url: apiUrl,
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: requestData
+        }, (response) => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+            return;
+          }
+          if (!response || typeof response !== 'object') {
+            reject(new Error('API返回空响应'));
+            return;
+          }
+          if (response.success) {
+            resolve(response.data);
+          } else {
+            reject(new Error(response.error || 'API请求失败'));
+          }
         });
-      } else {
-        const apiUrl = resolveChatApiUrl();
-        apiResponse = await new Promise((resolve, reject) => {
-          chrome.runtime.sendMessage({
-            action: 'apiRequest',
-            url: apiUrl,
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: requestData
-          }, (response) => {
-            if (chrome.runtime.lastError) {
-              reject(new Error(chrome.runtime.lastError.message));
-              return;
-            }
-            if (!response || typeof response !== 'object') {
-              reject(new Error('API返回空响应'));
-              return;
-            }
-            if (response.success) {
-              resolve(response.data);
-            } else {
-              reject(new Error(response.error || 'API请求失败'));
-            }
-          });
-        });
-      }
+      });
 
       const data = apiResponse;
       if (st.suggestionRequestToken !== requestToken) {
@@ -2719,10 +2648,17 @@
       }
       st.summaryRequestToken = null;
       if (data && data.summary) {
-         const { info_summary, review, reviews, summary_sources } = data.summary;
+         const { info_summary, review, reviews, reviews_sources, info_sources, summary_sources } = data.summary;
+         const reviewSources = Array.isArray(reviews_sources) ? reviews_sources : [];
+         const infoSources = Array.isArray(info_sources) ? info_sources : [];
+         const legacySources = Array.isArray(summary_sources) ? summary_sources : [];
          st.lastSummaryInfoHtml = formatSummaryText(info_summary || '待确认');
          st.lastSummaryReviewHtml = formatSummaryText(reviews || review || '无');
-         st.lastSummarySources = Array.isArray(summary_sources) ? summary_sources : [];
+         st.lastSummarySources = Array.from(new Set(
+           [...reviewSources, ...infoSources, ...legacySources]
+             .map((x) => String(x || '').trim())
+             .filter(Boolean)
+         ));
          st.summaryStatus = 'showing';
          st.summaryError = '';
          st.lastUpdatedAt = Date.now();

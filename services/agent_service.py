@@ -5,7 +5,7 @@ import logging
 import contextvars
 from collections import Counter
 from dataclasses import dataclass
-from typing import Optional, List, Dict, Any, Sequence, Union, Tuple, AsyncIterator
+from typing import Optional, List, Dict, Any, Sequence, Union, Tuple
 from threading import RLock
 from agno.agent import Agent
 
@@ -13,8 +13,6 @@ from config.config_loader import ConfigLoader
 from tools.rag_retrieval_tool import KnowledgeRetrievalToolkit
 from tools.summary_rag_tools import (
     create_summary_rag_toolkits,
-    create_summary_reviews_toolkits,
-    create_summary_info_toolkits,
 )
 from agent.work_reply_agent import WorkReplyAgent
 from agent.summary_agent import SummaryAgent
@@ -29,10 +27,15 @@ from utils.log_utils import (
 logger = logging.getLogger("agent_service")
 
 # Agno 异步 arun 用 asyncio.to_thread 执行工具，会复制 ContextVar 到工作线程；
-# threading.local 导致主协程读不到工具里 append 的来源，suggestion_sources / summary_sources 常为空。
+# threading.local 导致主协程读不到工具里 append 的来源，knowledge_sources 常为空。
 _knowledge_sources_cv: contextvars.ContextVar[Optional[List[str]]] = contextvars.ContextVar(
     "work_reply_ai_knowledge_sources", default=None
 )
+_summary_knowledge_sources_cv: contextvars.ContextVar[Optional[Dict[str, List[str]]]] = contextvars.ContextVar(
+    "work_reply_ai_summary_knowledge_sources", default=None
+)
+SUMMARY_SOURCE_BUCKET_INFO = "info"
+SUMMARY_SOURCE_BUCKET_REVIEWS = "reviews"
 _STATE_LOCK = RLock()
 
 _SOURCE_BRACKET_RE = re.compile(r"\[来源:\s*([^\]]+?)\s*\]")
@@ -44,12 +47,13 @@ __all__ = [
     "get_state",
     "ensure_agents",
     "ensure_summary_agent",
-    "ensure_summary_agents_split",
     "agent_run",
-    "agent_run_stream_collect",
     "reset_knowledge_sources",
     "append_knowledge_sources",
     "get_knowledge_sources",
+    "get_summary_knowledge_sources",
+    "SUMMARY_SOURCE_BUCKET_INFO",
+    "SUMMARY_SOURCE_BUCKET_REVIEWS",
     "merge_knowledge_source_names",
     "extract_sources_from_agno_run_output",
 ]
@@ -60,30 +64,74 @@ __all__ = [
 # ────────────────────────────────────────────────────────────────
 def reset_knowledge_sources() -> None:
     _knowledge_sources_cv.set([])
+    _summary_knowledge_sources_cv.set(
+        {
+            SUMMARY_SOURCE_BUCKET_INFO: [],
+            SUMMARY_SOURCE_BUCKET_REVIEWS: [],
+        }
+    )
 
 
-def append_knowledge_sources(items: Sequence[str]) -> None:
+def _clean_source_name(raw: Any) -> str:
+    v = str(raw or "")
+    v = v.replace("\ufeff", "")
+    v = v.replace("\u200b", "").replace("\u200e", "").replace("\u200f", "")
+    v = v.replace("\r", "").replace("\n", "").strip()
+    return v
+
+
+def append_knowledge_sources(items: Sequence[str], bucket: Optional[str] = None) -> None:
     cur = _knowledge_sources_cv.get()
     if cur is None:
         cur = []
         _knowledge_sources_cv.set(cur)
     seen = set(cur)
+    normalized_items: List[str] = []
     for it in items or []:
-        v = str(it or "")
-        v = v.replace("\ufeff", "")
-        v = v.replace("\u200b", "").replace("\u200e", "").replace("\u200f", "")
-        v = v.replace("\r", "").replace("\n", "").strip()
+        v = _clean_source_name(it)
         if not v:
             continue
+        normalized_items.append(v)
         if v in seen:
             continue
         seen.add(v)
         cur.append(v)
 
+    if not bucket:
+        return
+    bucket_key = str(bucket or "").strip().lower()
+    if bucket_key not in (SUMMARY_SOURCE_BUCKET_INFO, SUMMARY_SOURCE_BUCKET_REVIEWS):
+        return
+    bucket_map = _summary_knowledge_sources_cv.get()
+    if bucket_map is None:
+        bucket_map = {
+            SUMMARY_SOURCE_BUCKET_INFO: [],
+            SUMMARY_SOURCE_BUCKET_REVIEWS: [],
+        }
+        _summary_knowledge_sources_cv.set(bucket_map)
+    bucket_items = bucket_map.get(bucket_key) or []
+    bucket_seen = set(bucket_items)
+    for v in normalized_items:
+        if v in bucket_seen:
+            continue
+        bucket_seen.add(v)
+        bucket_items.append(v)
+    bucket_map[bucket_key] = bucket_items
 
-def get_knowledge_sources() -> List[str]:
+
+def get_knowledge_sources(bucket: Optional[str] = None) -> List[str]:
+    if bucket:
+        return get_summary_knowledge_sources().get(str(bucket or "").strip().lower(), [])
     cur = _knowledge_sources_cv.get()
     return list(cur or [])
+
+
+def get_summary_knowledge_sources() -> Dict[str, List[str]]:
+    bucket_map = _summary_knowledge_sources_cv.get() or {}
+    return {
+        SUMMARY_SOURCE_BUCKET_INFO: list(bucket_map.get(SUMMARY_SOURCE_BUCKET_INFO) or []),
+        SUMMARY_SOURCE_BUCKET_REVIEWS: list(bucket_map.get(SUMMARY_SOURCE_BUCKET_REVIEWS) or []),
+    }
 
 
 def merge_knowledge_source_names(*lists: Sequence[str]) -> List[str]:
@@ -407,8 +455,6 @@ class RuntimeState:
     agent_rag: Optional[Agent] = None
     agent_plain: Optional[Agent] = None
     agent_summary: Optional[Agent] = None
-    agent_summary_reviews: Optional[Agent] = None
-    agent_summary_info: Optional[Agent] = None
     work_reply_runner: Optional[Any] = None
     summary_runner: Optional[Any] = None
     rag_enabled: bool = False
@@ -438,8 +484,6 @@ def init_state() -> RuntimeState:
         agent_rag=None,
         agent_plain=None,
         agent_summary=None,
-        agent_summary_reviews=None,
-        agent_summary_info=None,
         work_reply_runner=None,
         summary_runner=None,
         rag_enabled=False,
@@ -501,32 +545,6 @@ def ensure_summary_agent() -> None:
         state.agent_summary = state.summary_runner._build_agent(tools=summary_toolkits)
 
 
-def ensure_summary_agents_split() -> None:
-    """
-    确保摘要两阶段 Agent 已初始化：
-    - reviews 阶段：仅注意事项库工具
-    - info_summary 阶段：仅售后案例库工具
-    """
-    state = get_state()
-    if state.agent_summary_reviews is not None and state.agent_summary_info is not None:
-        return
-    with _STATE_LOCK:
-        if state.summary_runner is None:
-            state.summary_runner = SummaryAgent(state.config)
-        if state.agent_summary_reviews is None:
-            reviews_toolkits = create_summary_reviews_toolkits(state.config)
-            state.agent_summary_reviews = state.summary_runner._build_agent(
-                tools=reviews_toolkits,
-                instructions=state.summary_runner.get_reviews_instructions(),
-            )
-        if state.agent_summary_info is None:
-            info_toolkits = create_summary_info_toolkits(state.config)
-            state.agent_summary_info = state.summary_runner._build_agent(
-                tools=info_toolkits,
-                instructions=state.summary_runner.get_info_summary_instructions(),
-            )
-
-
 # ────────────────────────────────────────────────────────────────
 # Agent 运行辅助（agent_run：Agno Agent.arun）
 # ────────────────────────────────────────────────────────────────
@@ -571,75 +589,3 @@ async def agent_run(
         audit.get("no_tool_reason"),
     )
     return text, kb, audit
-
-
-async def agent_run_stream_collect(
-    agent: Agent,
-    prompt: str,
-    session_id: Optional[str] = None,
-) -> AsyncIterator[Dict[str, Any]]:
-    """
-    流式执行 Agent（Agno stream=True + yield_run_output=True）。
-    产出 dict：kind=delta 时含 text；kind=tool 时含 event/name；kind=complete 时含 run_output、kb；
-    kind=error 时含 message。
-    """
-    from agno.run.agent import RunErrorEvent, RunOutput, RunEvent
-
-    reset_knowledge_sources()
-    reset_tool_invocations()
-    available_tools = _extract_agent_available_tool_names(agent)
-    agen = agent.arun(
-        prompt,
-        session_id=session_id,
-        stream=True,
-        yield_run_output=True,
-    )
-    async for item in agen:
-        if isinstance(item, RunOutput):
-            kb = merge_knowledge_source_names(
-                get_knowledge_sources(),
-                extract_sources_from_agno_run_output(item),
-            )
-            called_tools = _merge_called_tools(
-                available_tools=available_tools,
-                recorded_tools=get_tool_invocations(),
-                run_out=item,
-            )
-            audit = _build_tool_decision_audit(
-                agent,
-                called_tools,
-                available_tools=available_tools,
-            )
-            logger.info(
-                "[Agent工具决策审计-流式]\n"
-                "可用工具数: %s\n"
-                "可用工具: %s\n"
-                "实际调用次数: %s\n"
-                "实际调用工具: %s\n"
-                "未调用原因标签: %s",
-                len(available_tools),
-                available_tools,
-                audit.get("called_tool_count"),
-                audit.get("called_tool_histogram"),
-                audit.get("no_tool_reason"),
-            )
-            yield {
-                "kind": "complete",
-                "run_output": item,
-                "kb": kb,
-                "audit": audit,
-            }
-            return
-        if isinstance(item, RunErrorEvent):
-            msg = str(getattr(item, "content", None) or "Agent 运行错误")
-            yield {"kind": "error", "message": msg}
-            return
-        ev = getattr(item, "event", None) or ""
-        if ev == RunEvent.run_content.value:
-            c = getattr(item, "content", None)
-            if c:
-                yield {"kind": "delta", "text": str(c)}
-            continue
-        if "ToolCall" in ev:
-            yield {"kind": "tool", "event": ev}
-    yield {"kind": "error", "message": "流式结束但未收到 RunOutput"}

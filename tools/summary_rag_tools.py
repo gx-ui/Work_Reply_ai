@@ -30,9 +30,15 @@ class SummaryRetrievalCore:
     不含 Rerank，链路精简，响应更快。
     """
 
-    def __init__(self, milvus_tool: MilvusSearchTool, tool_name: str = "summary_retrieval_core"):
+    def __init__(
+        self,
+        milvus_tool: MilvusSearchTool,
+        tool_name: str = "summary_retrieval_core",
+        source_bucket: Optional[str] = None,
+    ):
         self.milvus_tool = milvus_tool
         self.tool_name = tool_name
+        self.source_bucket = str(source_bucket or "").strip().lower() or None
 
     def search(
         self,
@@ -92,7 +98,7 @@ class SummaryRetrievalCore:
                 if isinstance(it, dict) and str(it.get("file_name") or "").strip()
             ]
             if fn_list:
-                append_knowledge_sources(fn_list)
+                append_knowledge_sources(fn_list, bucket=self.source_bucket)
         except Exception as e:
             logger.warning("摘要 RAG 写入知识来源失败: %s", e)
         return items
@@ -137,7 +143,11 @@ class KefuShouhouToolkit(Toolkit):
     """
 
     def __init__(self, milvus_tool: MilvusSearchTool, config_loader: Optional[ConfigLoader] = None, **kwargs):
-        self._core = SummaryRetrievalCore(milvus_tool=milvus_tool, tool_name="KefuShouhou")
+        self._core = SummaryRetrievalCore(
+            milvus_tool=milvus_tool,
+            tool_name="KefuShouhou",
+            source_bucket="info",
+        )
         super().__init__(name="kefu_shouhou_toolkit", tools=[self.search_kefu_shouhou_knowledge], **kwargs)
 
     def search_kefu_shouhou_knowledge(self, query: str, limit: Optional[int] = 12) -> str:
@@ -169,7 +179,11 @@ class ZhuyishixiangToolkit(Toolkit):
     """
 
     def __init__(self, milvus_tool: MilvusSearchTool, config_loader: Optional[ConfigLoader] = None, **kwargs):
-        self._core = SummaryRetrievalCore(milvus_tool=milvus_tool, tool_name="Zhuyishixiang")
+        self._core = SummaryRetrievalCore(
+            milvus_tool=milvus_tool,
+            tool_name="Zhuyishixiang",
+            source_bucket="reviews",
+        )
         super().__init__(
             name="zhuyishixiang_toolkit",
             tools=[self.list_zhuyishixiang_file_names, self.search_zhuyishixiang_knowledge],
